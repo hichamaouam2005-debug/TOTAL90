@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TOTAL90 — The world of sports</title>
+<meta name="description" content="TOTAL90 : matchs en direct, résultats, classements et compétitions de football du monde entier.">
+<meta name="theme-color" content="#101216">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Aller au contenu</a>
+<header class="top">
+  <div class="top-in">
+    <a class="logo" href="#/" aria-label="TOTAL90, accueil">
+      <span class="logo-word">TOTAL</span>
+      <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true"><rect x="20.5" y="2" width="7" height="4.5" rx="1.5" fill="#00C875"/><circle cx="24" cy="26" r="17" fill="none" stroke="#00C875" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="96 10.8" transform="rotate(-72 24 26)"/><text x="24" y="31.6" text-anchor="middle" font-family="Archivo, Arial Black, sans-serif" font-weight="900" font-size="15.5" fill="currentColor">90</text></svg>
+    </a>
+    <div class="search" role="search">
+      <svg class="search-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Club, sélection, joueur, compétition…" aria-label="Rechercher" aria-controls="suggest" aria-expanded="false" aria-autocomplete="list">
+      <div id="suggest" class="suggest" role="listbox" hidden></div>
+    </div>
+  </div>
+  <nav class="menu" aria-label="Rubriques">
+    <a href="#/" data-nav="/">Accueil</a>
+    <a href="#/live" data-nav="/live"><span class="dot" aria-hidden="true"></span>Live</a>
+    <a href="#/football" data-nav="/football">Football</a>
+    <a href="#/basketball" data-nav="/basketball">Basketball</a>
+    <a href="#/tennis" data-nav="/tennis">Tennis</a>
+    <a href="#/autres-sports" data-nav="/autres-sports">Autres sports</a>
+    <a href="#/actualites" data-nav="/actualites">Actualités</a>
+    <a href="#/analyses" data-nav="/analyses">Analyses</a>
+    <a href="#/competitions" data-nav="/competitions">Compétitions</a>
+  </nav>
+</header>
+
+<main id="main" tabindex="-1"></main>
+
+<nav class="tabbar" aria-label="Navigation rapide">
+  <a href="#/" data-nav="/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9h-6v-6H9v6H3z"/></svg>Accueil</a>
+  <a href="#/live" data-nav="/live"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4"/></svg>Live</a>
+  <a href="#/football" data-nav="/football"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m12 7 4 3-1.5 4.5h-5L8 10z"/></svg>Matchs</a>
+  <button type="button" id="tab-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Recherche</button>
+  <a href="#/favoris" data-nav="/favoris"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>Favoris</a>
+</nav>
+
+<footer class="foot">
+  <p>TOTAL90 affiche uniquement des données issues de son fournisseur. Aucune donnée n’est inventée : quand une information manque, nous l’indiquons.</p>
+  <p id="foot-src"></p>
+</footer>
+
+<script src="/assets/app.js" defer></script>
+</body>
+</html>
