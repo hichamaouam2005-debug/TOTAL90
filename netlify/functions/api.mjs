@@ -10,6 +10,11 @@ const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
 const isId = s => /^\d{1,9}$/.test(s || "");
 const tzOf = p => (/^[A-Za-z_]+\/[A-Za-z_\/-]+$/.test(p.get("tz") || "") ? p.get("tz") : "Europe/Paris");
 const today = () => new Date().toISOString().slice(0, 10);
+// Mode gratuit (par défaut) : l'offre gratuite d'API-Football autorise environ 100 requêtes par jour.
+// On garde donc chaque réponse beaucoup plus longtemps en cache. Mettre PLAN=paid pour le direct rapide.
+const FREE = () => env("PLAN") !== "paid";
+const FREE_MIN = { matches: 1800, live: 1800, match: 1800, search: 86400, leagues: 86400, league: 43200, team: 86400, player: 86400, players: 86400, topscorers: 43200, teamstats: 86400 };
+const PAST_OR_FUTURE = 86400;
 
 // Chaque route : [fonction, durée de cache en secondes]
 const ROUTES = {
@@ -39,6 +44,21 @@ const ROUTES = {
   async team(p, prov, id) {
     if (!isId(id)) throw new ProviderError("bad_request", "Identifiant invalide.");
     return [await prov.team(Number(id), tzOf(p)), 3600];
+  },
+  async player(p, prov, id) {
+    if (!isId(id)) throw new ProviderError("bad_request", "Identifiant invalide.");
+    return [await prov.player(id), 21600];
+  },
+  async players(p, prov) {
+    return [await prov.playerSearch((p.get("q") || "").slice(0, 60)), 86400];
+  },
+  async topscorers(p, prov) {
+    if (!isId(p.get("league")) || !/^\d{4}$/.test(p.get("season") || "")) throw new ProviderError("bad_request", "Paramètres invalides.");
+    return [await prov.topScorers(p.get("league"), p.get("season")), 21600];
+  },
+  async teamstats(p, prov) {
+    if (!isId(p.get("team")) || !isId(p.get("league")) || !/^\d{4}$/.test(p.get("season") || "")) throw new ProviderError("bad_request", "Paramètres invalides.");
+    return [await prov.teamStats(p.get("team"), p.get("league"), p.get("season")), 21600];
   }
 };
 
@@ -71,8 +91,12 @@ export default async req => {
   if (hit && hit.until > Date.now()) return json(hit.data, 200, Math.round((hit.until - Date.now()) / 1000));
 
   try {
-    const [data, ttl] = await handler(url.searchParams, PROVIDERS[providerName](key), id);
-    const payload = { data, provider: PROVIDERS[providerName](key).name, fetchedAt: new Date().toISOString() };
+    let [data, ttl] = await handler(url.searchParams, PROVIDERS[providerName](key), id);
+    if (FREE()) {
+      ttl = Math.max(ttl, FREE_MIN[route] || 3600);
+      if (route === "matches" && url.searchParams.get("date") && url.searchParams.get("date") !== today()) ttl = Math.max(ttl, PAST_OR_FUTURE);
+    }
+    const payload = { data, provider: PROVIDERS[providerName](key).name, plan: FREE() ? "free" : "paid", fetchedAt: new Date().toISOString() };
     memo.set(cacheKey, { data: payload, until: Date.now() + ttl * 1000 });
     if (memo.size > 500) memo.delete(memo.keys().next().value);
     return json(payload, 200, ttl);

@@ -110,6 +110,41 @@ function league(l) {
   };
 }
 
+
+// ---- Joueurs : agrégation des statistiques d'une saison (toutes compétitions) ----
+const n = v => (typeof v === "number" ? v : parseFloat(v)) || 0;
+function profile(p) {
+  return { id: p.id, name: p.name, firstname: p.firstname || null, lastname: p.lastname || null, age: p.age ?? null,
+    birth: p.birth?.date || null, nationality: p.nationality || null, height: p.height || null, weight: p.weight || null, photo: p.photo || null };
+}
+function compStats(s) {
+  const acc = n(s.passes?.accuracy), tot = n(s.passes?.total);
+  return {
+    team: s.team ? { id: s.team.id, name: s.team.name, logo: s.team.logo } : null,
+    league: s.league ? { id: s.league.id, name: s.league.name, country: s.league.country, logo: s.league.logo } : null,
+    position: s.games?.position || null,
+    apps: n(s.games?.appearences), starts: n(s.games?.lineups), minutes: n(s.games?.minutes), rating: n(s.games?.rating) || null,
+    goals: n(s.goals?.total), assists: n(s.goals?.assists), conceded: n(s.goals?.conceded), saves: n(s.goals?.saves),
+    shots: n(s.shots?.total), shotsOn: n(s.shots?.on),
+    passes: tot, keyPasses: n(s.passes?.key),
+    // Selon les compétitions, le fournisseur donne la précision en % ou en nombre de passes réussies.
+    passAcc: acc > 0 ? (acc <= 100 ? acc : tot ? Math.min(100, (acc / tot) * 100) : null) : null,
+    tackles: n(s.tackles?.total), interceptions: n(s.tackles?.interceptions), blocks: n(s.tackles?.blocks),
+    duels: n(s.duels?.total), duelsWon: n(s.duels?.won),
+    dribbles: n(s.dribbles?.attempts), dribblesWon: n(s.dribbles?.success),
+    yellow: n(s.cards?.yellow) + n(s.cards?.yellowred), red: n(s.cards?.red) + n(s.cards?.yellowred)
+  };
+}
+const SUM = ["apps", "starts", "minutes", "goals", "assists", "conceded", "saves", "shots", "shotsOn", "passes", "keyPasses", "tackles", "interceptions", "blocks", "duels", "duelsWon", "dribbles", "dribblesWon", "yellow", "red"];
+function aggregate(comps) {
+  const t = Object.fromEntries(SUM.map(k => [k, comps.reduce((a, c) => a + c[k], 0)]));
+  const wavg = k => { const w = comps.filter(c => c[k] != null && c.minutes > 0); const m = w.reduce((a, c) => a + c.minutes, 0); return m ? w.reduce((a, c) => a + c[k] * c.minutes, 0) / m : null; };
+  t.passAcc = wavg("passAcc"); t.rating = wavg("rating");
+  const pos = {}; comps.forEach(c => c.position && (pos[c.position] = (pos[c.position] || 0) + c.minutes + 1));
+  t.position = Object.entries(pos).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  return t;
+}
+
 const clean = q => q.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 const settle = p => p.then(v => ({ ok: true, v }), e => ({ ok: false, e }));
 
@@ -178,6 +213,56 @@ export function apiFootball(key) {
         standings: groups, standingsError: st.ok ? null : st.e.code,
         next: next.ok ? next.v.map(match) : null,
         last: last.ok ? last.v.map(match).reverse() : null
+      };
+    },
+
+
+    async playerSearch(q) {
+      const term = clean(q);
+      if (term.length < 3) return [];
+      return (await call("players/profiles", { search: term }, key)).map(x => ({ ...profile(x.player), position: x.player.position || null }));
+    },
+
+    async player(id) {
+      const seasons = (await call("players/seasons", { player: id }, key)).map(Number).sort((a, b) => b - a).slice(0, 3);
+      if (!seasons.length) throw new ProviderError("not_found", "Aucune statistique trouvée pour ce joueur.");
+      const res = await Promise.all(seasons.map(y => settle(call("players", { id, season: y }, key))));
+      let prof = null; const out = []; let blocked = 0;
+      res.forEach((r, i) => {
+        if (!r.ok) { if (r.e.code === "plan") blocked++; return; }
+        const row = r.v[0]; if (!row) return;
+        prof = prof || profile(row.player);
+        const comps = (row.statistics || []).map(compStats).filter(c => c.apps > 0 || c.minutes > 0);
+        out.push({ season: seasons[i], total: aggregate(comps), competitions: comps });
+      });
+      if (!prof) throw new ProviderError(blocked ? "plan" : "not_found", blocked ? "Les statistiques de ce joueur ne sont pas incluses dans l’abonnement actuel." : "Joueur introuvable.");
+      return { player: prof, seasons: out, seasonsBlocked: blocked };
+    },
+
+    async topScorers(league, season) {
+      return (await call("players/topscorers", { league, season }, key)).map(x => {
+        const comps = (x.statistics || []).map(compStats);
+        return { player: profile(x.player), team: comps[0]?.team || null, total: aggregate(comps) };
+      });
+    },
+
+    async teamStats(team, league, season) {
+      const r = await call("teams/statistics", { team, league, season }, key);
+      if (!r || Array.isArray(r) && !r.length) throw new ProviderError("not_found", "Statistiques indisponibles.");
+      const s = Array.isArray(r) ? r[0] : r;
+      const side = o => ({ home: n(o?.home), away: n(o?.away), total: n(o?.total) });
+      return {
+        league: { id: s.league?.id, name: s.league?.name, logo: s.league?.logo, season: s.league?.season },
+        form: s.form || "",
+        played: side(s.fixtures?.played), wins: side(s.fixtures?.wins), draws: side(s.fixtures?.draws), loses: side(s.fixtures?.loses),
+        goalsFor: side(s.goals?.for?.total), goalsAgainst: side(s.goals?.against?.total),
+        avgFor: side(s.goals?.for?.average), avgAgainst: side(s.goals?.against?.average),
+        minutesFor: Object.fromEntries(Object.entries(s.goals?.for?.minute || {}).map(([k, v]) => [k, n(v?.total)])),
+        minutesAgainst: Object.fromEntries(Object.entries(s.goals?.against?.minute || {}).map(([k, v]) => [k, n(v?.total)])),
+        cleanSheet: side(s.clean_sheet), failedToScore: side(s.failed_to_score),
+        biggest: { winHome: s.biggest?.wins?.home || null, winAway: s.biggest?.wins?.away || null, loseHome: s.biggest?.loses?.home || null, loseAway: s.biggest?.loses?.away || null, streakWins: n(s.biggest?.streak?.wins) },
+        formations: (s.lineups || []).map(l => ({ formation: l.formation, played: n(l.played) })),
+        penalties: { scored: n(s.penalty?.scored?.total), missed: n(s.penalty?.missed?.total) }
       };
     },
 

@@ -136,7 +136,8 @@ function liveCard(m) {
     h("div", { class: "min" }, clock(m)));
 }
 function updatedLine(body) {
-  return h("p", { class: "updated", "aria-live": "polite" }, `Mis à jour à ${new Date(body.fetchedAt).toLocaleTimeString("fr-FR")}`);
+  return h("p", { class: "updated", "aria-live": "polite" }, `Données du fournisseur relevées à ${new Date(body.fetchedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`,
+    body.plan === "free" ? " · Version gratuite : données actualisées moins souvent (scores environ toutes les 30 minutes)." : "");
 }
 
 /* ---------- vues ---------- */
@@ -151,9 +152,10 @@ async function viewHome(root, ctx) {
       h("aside", {}, h("h2", {}, "Mes favoris", h("a", { class: "more", href: "#/favoris" }, "Gérer")), h("div", { id: "home-fav" }),
         h("h2", {}, "Compétitions populaires", h("a", { class: "more", href: "#/competitions" }, "Toutes")), h("div", { id: "home-comps" }, skeleton(2)),
         h("h2", {}, "Actualités"), soonPanel(3, "Les dernières actualités de sources reconnues, avec titre, image, résumé, source et lien vers l’article."),
-        h("h2", {}, "Meilleures performances"), soonPanel(2, "Les joueurs les mieux notés du moment, calculés à partir de leurs statistiques réelles.")))
+        h("h2", {}, "Meilleures performances", h("a", { class: "more", href: "#/analyses" }, "Analyses")), h("div", { id: "home-perf" })))
   );
   renderHomeComps($("#home-comps", root));
+  topPerformers($("#home-perf", root), 61, 5, ctx);
   const load = async () => {
     let today, yesterday;
     try {
@@ -207,12 +209,12 @@ function soonPanel(step, text) {
 }
 
 async function viewLive(root, ctx) {
-  root.append(h("h1", {}, "En direct"), h("p", { class: "sub" }, "Scores mis à jour automatiquement toutes les 30 secondes, sans recharger la page."), h("div", { id: "live-list" }, skeleton(4)));
+  root.append(h("h1", {}, "En direct"), h("p", { class: "sub" }, "Les scores se mettent à jour automatiquement, sans recharger la page."), h("div", { id: "live-list" }, skeleton(4)));
   const load = async () => {
     try {
-      const body = await api("live", { ttl: 10000 });
+      const body = await api(`matches?date=${TODAY()}`, { ttl: 20000 });
       if (!ctx.alive()) return;
-      const g = groupMatches(body.data);
+      const g = groupMatches(body.data.filter(m => m.status.state === "live"));
       put($("#live-list", root), ...(g.length ? g.map(x => groupBlock(x)) : [empty("Aucun match en cours", "Revenez plus tard ou consultez le programme du jour.")]), updatedLine(body));
     } catch (e) { if (ctx.alive()) put($("#live-list", root), stateBox(e)); }
   };
@@ -317,8 +319,8 @@ function lineupsBlock(m) {
   return [h("div", { class: "lineups" }, m.lineups.map(l => h("div", {},
     h("h3", {}, team(l.teamId).name, l.formation ? ` · ${l.formation}` : ""),
     l.coach ? h("p", { class: "updated" }, `Entraîneur : ${l.coach}`) : null,
-    h("h4", {}, "Titulaires"), h("ol", {}, l.startXI.map(p => h("li", {}, h("b", {}, p.number ?? ""), p.name))),
-    l.subs.length ? [h("h4", {}, "Remplaçants"), h("ol", {}, l.subs.map(p => h("li", {}, h("b", {}, p.number ?? ""), p.name)))] : null)))];
+    h("h4", {}, "Titulaires"), h("ol", {}, l.startXI.map(p => h("li", {}, h("b", {}, p.number ?? ""), p.id ? h("a", { href: `#/joueur/${p.id}` }, p.name) : p.name))),
+    l.subs.length ? [h("h4", {}, "Remplaçants"), h("ol", {}, l.subs.map(p => h("li", {}, h("b", {}, p.number ?? ""), p.id ? h("a", { href: `#/joueur/${p.id}` }, p.name) : p.name)))] : null)))];
 }
 function h2hBlock(m) {
   if (m.h2h == null) return [empty("Historique indisponible", "Le fournisseur n’a pas renvoyé les confrontations directes.")];
@@ -355,7 +357,7 @@ async function viewTeam(root, ctx, params, id) {
       .map(([v, l]) => h("div", { class: "kpi" }, h("b", {}, v), h("span", {}, l)))) : null;
   const posFR = { Goalkeeper: "Gardiens", Defender: "Défenseurs", Midfielder: "Milieux", Attacker: "Attaquants" };
   const squad = d.squad == null ? empty("Effectif indisponible", "Le fournisseur n’a pas renvoyé l’effectif.") :
-    Object.entries(posFR).map(([k, l]) => { const ps = d.squad.filter(p => p.position === k); return ps.length ? [h("h3", { style: "margin-top:14px" }, l), h("div", { class: "squad" }, ps.map(p => h("div", { class: "player" }, img(p.photo), h("div", {}, h("b", {}, p.name), h("small", {}, [p.number != null ? `N° ${p.number}` : null, p.age ? `${p.age} ans` : null].filter(Boolean).join(" · "))))))] : null; });
+    Object.entries(posFR).map(([k, l]) => { const ps = d.squad.filter(p => p.position === k); return ps.length ? [h("h3", { style: "margin-top:14px" }, l), h("div", { class: "squad" }, ps.map(p => h("a", { class: "player", href: `#/joueur/${p.id}` }, img(p.photo), h("div", {}, h("b", {}, p.name), h("small", {}, [p.number != null ? `N° ${p.number}` : null, p.age ? `${p.age} ans` : null].filter(Boolean).join(" · "))))))] : null; });
   put($("#tx", root), 
     h("section", { class: "panel" },
       h("div", { class: "thead" }, img(t.logo),
@@ -369,13 +371,15 @@ async function viewTeam(root, ctx, params, id) {
       h("div", {},
         h("h2", {}, "Prochains matchs"), d.next == null ? stateBox({}) : d.next.length ? h("div", { class: "group" }, d.next.filter(m => m.status.state !== "finished").map(m => matchRow(m, { showDate: true }))) : empty("Aucun match programmé", ""),
         h("h2", {}, "Derniers résultats"), d.last == null ? stateBox({}) : last.length ? h("div", { class: "group" }, last.map(m => matchRow(m, { showDate: true }))) : empty("Aucun résultat récent", ""),
+        h("h2", {}, "Statistiques avancées"), h("div", { id: "team-adv" }),
         h("h2", {}, "Effectif"), h("div", { class: "panel" }, squad)),
       h("aside", {},
         h("h2", {}, "Classement"), d.standing ? standingTable(d.standing.rows, tid, d.standing.league) : empty("Classement indisponible", "Pas de championnat en cours trouvé pour cette équipe."),
         d.competitions?.length ? [h("h2", {}, "Compétitions"), h("div", { class: "comps" }, d.competitions.map(compTile))] : null,
-        h("h2", {}, "Statistiques avancées"), soonPanel(2, "Possession, efficacité offensive, solidité défensive, performances à domicile et à l’extérieur, comparaison avec les autres équipes et graphiques."),
+        
         h("h2", {}, "Actualités du club"), soonPanel(3, "Les dernières informations sur le club, issues de sources reconnues."))),
     updatedLine(body));
+  teamAdvanced($("#team-adv", root), d, tid);
 }
 function standingTable(rows, highlight, league) {
   return h("div", { class: "panel table-wrap" },
@@ -458,9 +462,9 @@ async function viewSearch(root, ctx, params) {
   put($("#sx", root), 
     ...section("Clubs et sélections", d.teams, l => h("div", { class: "comps" }, l.slice(0, 30).map(t => h("a", { class: "comp", href: `#/equipe/${t.id}` }, img(t.logo), h("span", {}, t.name, h("small", {}, t.national ? `Sélection · ${t.country}` : t.country))))), "La recherche d’équipes n’a pas répondu."),
     ...section("Compétitions", d.leagues, l => h("div", { class: "comps" }, l.slice(0, 20).map(compTile)), "La recherche de compétitions n’a pas répondu."),
-    ...section("Joueurs", d.players, l => h("div", { class: "squad" }, l.slice(0, 30).map(p => h("div", { class: "player" }, img(p.photo), h("div", {}, h("b", {}, p.name), h("small", {}, [p.position, p.nationality, p.age ? `${p.age} ans` : null].filter(Boolean).join(" · ")))))), "La recherche de joueurs n’est pas disponible avec l’abonnement actuel."),
+    ...section("Joueurs", d.players, l => h("div", { class: "squad" }, l.slice(0, 30).map(p => h("a", { class: "player", href: `#/joueur/${p.id}` }, img(p.photo), h("div", {}, h("b", {}, p.name), h("small", {}, [p.position, p.nationality, p.age ? `${p.age} ans` : null].filter(Boolean).join(" · ")))))), "La recherche de joueurs n’est pas disponible avec l’abonnement actuel."),
     ...section("Entraîneurs", d.coaches, l => h("div", { class: "squad" }, l.slice(0, 20).map(c => h(c.team ? "a" : "div", { class: "player", href: c.team ? `#/equipe/${c.team.id}` : null, style: "text-decoration:none" }, img(c.photo), h("div", {}, h("b", {}, c.name), h("small", {}, [c.team?.name, c.nationality].filter(Boolean).join(" · ")))))), "La recherche d’entraîneurs n’a pas répondu."),
-    h("p", { class: "updated", style: "margin-top:16px" }, "Les fiches détaillées des joueurs (statistiques, note sur 10, graphiques) arrivent à l’étape 2."));
+    h("p", { class: "updated", style: "margin-top:16px" }, "Touchez un joueur pour voir sa fiche détaillée, sa note TOTAL90 et le comparer."));
 }
 
 async function viewFavorites(root, ctx) {
@@ -483,8 +487,7 @@ const SOON = {
   basketball: ["Basketball", 5, "NBA, EuroLeague et championnats nationaux : matchs en direct, résultats, classements et fiches d’équipes, via un fournisseur de données basket."],
   tennis: ["Tennis", 5, "Tournois ATP et WTA, Grand Chelem, résultats en direct et classements, via un fournisseur spécialisé tennis."],
   "autres-sports": ["Autres sports", 5, "Formule 1, sports de combat, rugby, athlétisme… avec des fournisseurs de données dédiés à chaque discipline."],
-  actualites: ["Actualités", 3, "Football, mercato, basket, tennis, F1, athlétisme, sports de combat : titre, image, résumé, date, source et lien vers l’article original, récupérés automatiquement depuis des médias reconnus."],
-  analyses: ["Analyses", 2, "Fiches joueurs (matchs, buts, passes, minutes, tirs cadrés, passes réussies, dribbles, duels, cartons), note sur 10 calculée à partir des statistiques, comparaisons et graphiques interactifs, puis analyses d’équipes et probabilités de victoire (étape 4)."]
+  actualites: ["Actualités", 3, "Football, mercato, basket, tennis, F1, athlétisme, sports de combat : titre, image, résumé, date, source et lien vers l’article original, récupérés automatiquement depuis des médias reconnus."]
 };
 function viewSoon(root, ctx, params, key) {
   const [title, step, text] = SOON[key];
@@ -493,11 +496,282 @@ function viewSoon(root, ctx, params, key) {
 }
 function viewNotFound(root) { root.append(empty("Page introuvable", "Revenez à l’accueil.")); }
 
+/* ================= ÉTAPE 2 : ANALYSES ================= */
+
+/* Note TOTAL90 (sur 10), calculée uniquement à partir des statistiques réelles du joueur.
+   Chaque critère est ramené sur 90 minutes, comparé à une plage de référence propre au poste
+   (0 = bas de la plage, 1 = haut), puis pondéré. Note = 4 + 6 × moyenne pondérée.
+   Un critère sans donnée est ignoré ; si moins de la moitié du poids est disponible, pas de note. */
+const POS_FR = { Goalkeeper: "Gardien", Defender: "Défenseur", Midfielder: "Milieu", Attacker: "Attaquant" };
+function t90Rating(t) {
+  if (!t || t.minutes < 90) return null;
+  const p90 = v => (v / t.minutes) * 90;
+  const c = (v, lo, hi) => Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+  const duel = t.duels >= 10 ? (t.duelsWon / t.duels) * 100 : null;
+  const acc = t.passAcc;
+  const def = p90(t.tackles + t.interceptions);
+  const cards = p90(t.yellow + 3 * t.red);
+  let parts;
+  if (t.position === "Goalkeeper") {
+    const faced = t.saves + t.conceded;
+    parts = [["Arrêts réussis", faced >= 10 ? c((t.saves / faced) * 100, 55, 80) : null, .55], ["Buts encaissés", c(1.8 - p90(t.conceded), 0, 1.3), .35], ["Jeu au pied", acc != null ? c(acc, 55, 85) : null, .10]];
+  } else if (t.position === "Defender") {
+    parts = [["Actions défensives", c(def, 1, 4.5), .30], ["Duels gagnés", duel != null ? c(duel, 40, 65) : null, .25], ["Précision des passes", acc != null ? c(acc, 70, 90) : null, .20], ["Buts et passes décisives", c(p90(t.goals + t.assists), 0, .25), .10], ["Discipline", c(.6 - cards, 0, .6), .15]];
+  } else if (t.position === "Midfielder") {
+    parts = [["Buts", c(p90(t.goals), 0, .35), .15], ["Passes décisives", c(p90(t.assists), 0, .3), .20], ["Passes clés", c(p90(t.keyPasses), 0, 2.5), .20], ["Précision des passes", acc != null ? c(acc, 70, 90) : null, .15], ["Dribbles réussis", c(p90(t.dribblesWon), 0, 1.5), .10], ["Récupérations", c(def, 0, 3), .10], ["Duels gagnés", duel != null ? c(duel, 40, 60) : null, .10]];
+  } else {
+    parts = [["Buts", c(p90(t.goals), 0, .7), .35], ["Passes décisives", c(p90(t.assists), 0, .3), .15], ["Tirs cadrés", c(p90(t.shotsOn), 0, 1.6), .10], ["Dribbles réussis", c(p90(t.dribblesWon), 0, 1.5), .10], ["Passes clés", c(p90(t.keyPasses), 0, 2), .10], ["Duels gagnés", duel != null ? c(duel, 30, 55) : null, .10], ["Précision des passes", acc != null ? c(acc, 60, 85) : null, .10]];
+  }
+  const ok = parts.filter(p => p[1] != null), w = ok.reduce((a, p) => a + p[2], 0);
+  if (w < .5) return null;
+  const score = ok.reduce((a, p) => a + p[1] * p[2], 0) / w;
+  return { note: Math.round((4 + 6 * score) * 10) / 10, parts: parts.map(([label, v, weight]) => ({ label, v, weight })), reliable: t.minutes >= 450 };
+}
+const noteColor = x => x >= 8 ? "var(--green)" : x >= 6.5 ? "#7BD88F" : x >= 5.5 ? "#F5C518" : "#FF8A5B";
+function noteBadge(r, big) {
+  if (!r) return h("span", { class: "note none" + (big ? " big" : ""), title: "Pas assez de minutes ou de données pour calculer une note" }, "–");
+  return h("span", { class: "note" + (big ? " big" : "") + (r.reliable ? "" : " low"), style: `--nc:${noteColor(r.note)}`, title: r.reliable ? "Note TOTAL90" : "Note TOTAL90, peu fiable (moins de 450 minutes jouées)" }, r.note.toFixed(1).replace(".", ","));
+}
+function ratingDoc() {
+  return h("details", { class: "panel doc" }, h("summary", {}, "Comment est calculée la note TOTAL90 ?"),
+    h("p", {}, "La note est calculée par TOTAL90 à partir des seules statistiques fournies par API-Football, sans avis humain. Chaque statistique est ramenée sur 90 minutes, comparée à une plage de référence propre au poste, puis pondérée :"),
+    h("ul", {},
+      h("li", {}, "Attaquant : buts 35 %, passes décisives 15 %, tirs cadrés, dribbles, passes clés, duels et précision des passes 10 % chacun."),
+      h("li", {}, "Milieu : passes décisives 20 %, passes clés 20 %, buts 15 %, précision des passes 15 %, dribbles, récupérations et duels 10 % chacun."),
+      h("li", {}, "Défenseur : actions défensives (tacles et interceptions) 30 %, duels 25 %, précision des passes 20 %, discipline 15 %, buts et passes décisives 10 %."),
+      h("li", {}, "Gardien : pourcentage d’arrêts 55 %, buts encaissés par match 35 %, jeu au pied 10 %.")),
+    h("p", {}, "Note = 4 + 6 × score pondéré, de 4 (bas de la plage partout) à 10 (haut de la plage partout). Une statistique absente est ignorée. Sous 90 minutes jouées, aucune note ; sous 450 minutes, la note est affichée en pointillés car peu fiable. C’est un indicateur statistique, pas un jugement définitif."));
+}
+
+/* ---------- graphiques SVG (sans bibliothèque) ---------- */
+const SVG = "http://www.w3.org/2000/svg";
+function s(tag, attrs, ...kids) { const el = document.createElementNS(SVG, tag); for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v); kids.flat().forEach(k => k != null && el.append(k.nodeType ? k : document.createTextNode(String(k)))); return el; }
+function barChart({ labels, series, fmt = v => v, height = 220 }) {
+  const W = 640, H = height, L = 34, B = 30, T = 14, R = 8;
+  const max = Math.max(1, ...series.flatMap(x => x.values.map(v => v || 0)));
+  const step = (W - L - R) / labels.length, bw = Math.min(46, (step * .72) / series.length);
+  const y = v => T + (H - T - B) * (1 - v / max);
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img", "aria-label": series.map(x => x.name).join(", ") });
+  [0, .5, 1].forEach(f => { const v = max * f; svg.append(s("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: "grid" }), s("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end", class: "axis" }, fmt(Math.round(v * 10) / 10))); });
+  labels.forEach((lab, i) => {
+    const cx = L + step * i + step / 2;
+    series.forEach((se, j) => {
+      const v = se.values[i] || 0, x = cx - (bw * series.length) / 2 + j * bw;
+      const r = s("rect", { x: x + 1, y: y(v), width: bw - 2, height: Math.max(0, H - B - y(v)), rx: 3, fill: se.color, class: "bar" + (se.highlight?.[i] ? " hl" : "") }, s("title", {}, `${lab} · ${se.name} : ${fmt(v)}`));
+      svg.append(r);
+      if (series.length === 1 && labels.length <= 12) svg.append(s("text", { x: x + bw / 2, y: y(v) - 5, "text-anchor": "middle", class: "val" }, fmt(v)));
+    });
+    svg.append(s("text", { x: cx, y: H - 10, "text-anchor": "middle", class: "axis" }, lab));
+  });
+  return h("div", { class: "chart-wrap" }, svg, series.length > 1 ? h("div", { class: "legend" }, series.map(x => h("span", {}, h("i", { style: `background:${x.color}` }), x.name))) : null);
+}
+function radar(axes, sets) {
+  const W = 440, C = 220, Rr = 120, nA = axes.length;
+  const pt = (i, v) => { const a = -Math.PI / 2 + (2 * Math.PI * i) / nA; return [C + Math.cos(a) * Rr * v, C + Math.sin(a) * Rr * v]; };
+  const svg = s("svg", { viewBox: `0 0 ${W} ${W}`, class: "chart radar", role: "img", "aria-label": "Comparaison des profils" });
+  [.25, .5, .75, 1].forEach(f => svg.append(s("polygon", { points: axes.map((_, i) => pt(i, f).join(",")).join(" "), class: "grid" })));
+  axes.forEach((a, i) => { const [x, y] = pt(i, 1.16); svg.append(s("line", { x1: C, y1: C, x2: pt(i, 1)[0], y2: pt(i, 1)[1], class: "grid" }), s("text", { x, y: y + 4, "text-anchor": x < C - 5 ? "end" : x > C + 5 ? "start" : "middle", class: "axis" }, a)); });
+  sets.forEach(st => svg.append(s("polygon", { points: st.values.map((v, i) => pt(i, Math.max(.03, v ?? 0)).join(",")).join(" "), fill: st.color, "fill-opacity": .22, stroke: st.color, "stroke-width": 2 }, s("title", {}, st.name))));
+  return h("div", { class: "chart-wrap" }, svg, h("div", { class: "legend" }, sets.map(x => h("span", {}, h("i", { style: `background:${x.color}` }), x.name))));
+}
+const fr = (v, d = 0) => v == null || isNaN(v) ? "–" : Number(v).toLocaleString("fr-FR", { maximumFractionDigits: d, minimumFractionDigits: d });
+const seasonLabel = y => `${y}/${String(Number(y) + 1).slice(2)}`;
+
+/* ---------- recherche de joueur réutilisable ---------- */
+function playerPicker(onPick, placeholder) {
+  const input = h("input", { class: "field wide", type: "search", placeholder: placeholder || "Nom d’un joueur (au moins 3 lettres)", "aria-label": "Rechercher un joueur" });
+  const list = h("div", { class: "pick-list" });
+  let timer, ctrl;
+  input.addEventListener("input", () => {
+    clearTimeout(timer); const q = input.value.trim();
+    if (q.length < 3) { put(list); return; }
+    timer = setTimeout(async () => {
+      ctrl?.abort(); ctrl = new AbortController();
+      put(list, h("p", { class: "updated" }, "Recherche…"));
+      try {
+        const { data } = await api(`players?q=${encodeURIComponent(q)}`, { ttl: 600000, signal: ctrl.signal });
+        put(list, data.length ? data.slice(0, 12).map(p => h("button", { type: "button", class: "player pick", onclick: () => onPick(p) }, img(p.photo), h("div", {}, h("b", {}, p.name), h("small", {}, [POS_FR[p.position] || p.position, p.nationality, p.age ? `${p.age} ans` : null].filter(Boolean).join(" · "))))) : h("p", { class: "updated" }, "Aucun joueur trouvé."));
+      } catch (e) { if (e.name !== "AbortError") put(list, stateBox(e)); }
+    }, 400);
+  });
+  return h("div", { class: "picker" }, input, list);
+}
+
+/* ---------- fiche joueur ---------- */
+async function viewPlayer(root, ctx, params, id) {
+  const vs = /^\d+$/.test(params.get("vs") || "") ? params.get("vs") : null;
+  root.append(h("div", { id: "px" }, skeleton(5)));
+  let a, b;
+  try { [a, b] = await Promise.all([api(`player/${id}`, { ttl: 600000 }), vs ? api(`player/${vs}`, { ttl: 600000 }) : null]); }
+  catch (e) { if (ctx.alive()) put($("#px", root), stateBox(e)); return; }
+  if (!ctx.alive()) return;
+  const P = a.data, seasons = P.seasons;
+  document.title = `${P.player.name} · TOTAL90`;
+  let sel = params.get("saison") && seasons.find(x => String(x.season) === params.get("saison")) ? params.get("saison") : String(seasons[0]?.season);
+  const box = $("#px", root);
+  const draw = () => {
+    const cur = seasons.find(x => String(x.season) === sel);
+    const t = cur?.total, r = t90Rating(t);
+    const mainComp = cur?.competitions.slice().sort((x, y) => y.minutes - x.minutes)[0];
+    const pl = P.player;
+    const head = h("section", { class: "panel" }, h("div", { class: "thead" }, img(pl.photo, "round"),
+      h("div", {}, h("h1", {}, pl.name), h("div", { class: "meta" },
+        t?.position ? h("span", {}, POS_FR[t.position] || t.position) : null, pl.nationality ? h("span", {}, pl.nationality) : null,
+        pl.age ? h("span", {}, `${pl.age} ans`) : null, pl.height ? h("span", {}, pl.height) : null, pl.weight ? h("span", {}, pl.weight) : null,
+        mainComp?.team ? h("a", { href: `#/equipe/${mainComp.team.id}` }, mainComp.team.name) : null)),
+      h("div", { class: "note-box" }, noteBadge(r, true), h("small", {}, `Note TOTAL90 · ${seasonLabel(sel)}`))),
+      h("div", { class: "bar", style: "margin:14px 0 0" }, seasons.map(x => h("button", { type: "button", class: "chip", "aria-pressed": String(String(x.season) === sel), onclick: () => { sel = String(x.season); draw(); } }, seasonLabel(x.season)))),
+      P.seasonsBlocked ? h("p", { class: "updated" }, `${P.seasonsBlocked} saison(s) récente(s) non incluse(s) dans l’abonnement actuel.`) : null);
+    if (!t) { put(box, head, empty("Pas de statistiques pour cette saison", "")); return; }
+    const gk = t.position === "Goalkeeper";
+    const kpi = (v, l) => h("div", { class: "kpi" }, h("b", {}, v), h("span", {}, l));
+    const kpis = h("div", { class: "kpis" },
+      kpi(fr(t.apps), "Matchs joués"), kpi(fr(t.starts), "Titularisations"), kpi(fr(t.minutes), "Minutes jouées"),
+      gk ? [kpi(fr(t.saves), "Arrêts"), kpi(fr(t.conceded), "Buts encaissés"), kpi(t.saves + t.conceded ? fr((t.saves / (t.saves + t.conceded)) * 100) + " %" : "–", "Arrêts réussis")]
+         : [kpi(fr(t.goals), "Buts"), kpi(fr(t.assists), "Passes décisives"), kpi(`${fr(t.shotsOn)} / ${fr(t.shots)}`, "Tirs cadrés / tirs")],
+      kpi(t.passAcc != null ? fr(t.passAcc) + " %" : "–", `Passes réussies (${fr(t.passes)} passes)`), kpi(fr(t.keyPasses), "Passes clés"),
+      kpi(`${fr(t.dribblesWon)} / ${fr(t.dribbles)}`, "Dribbles réussis / tentés"), kpi(t.duels ? `${fr(t.duelsWon)} (${fr((t.duelsWon / t.duels) * 100)} %)` : "–", "Duels gagnés"),
+      kpi(fr(t.tackles + t.interceptions), "Tacles et interceptions"), kpi(`${fr(t.yellow)} / ${fr(t.red)}`, "Cartons jaunes / rouges"),
+      t.minutes ? kpi(fr(((t.goals + t.assists) / t.minutes) * 90, 2), "Buts + passes déc. par 90 min") : null);
+    const comps = h("div", { class: "panel table-wrap" }, h("table", { class: "standings" },
+      h("thead", {}, h("tr", {}, ["", "Compétition", "MJ", "Min", "Buts", "PD", "Note"].map(x => h("th", {}, x)))),
+      h("tbody", {}, cur.competitions.map(c => h("tr", {}, h("td", {}, img(c.league?.logo)), h("td", {}, h("a", { href: c.league ? `#/competition/${c.league.id}` : "#/" }, c.league?.name || "–"), h("small", { class: "updated" }, c.team ? " · " + c.team.name : "")),
+        h("td", {}, c.apps), h("td", {}, fr(c.minutes)), h("td", {}, c.goals), h("td", {}, c.assists), h("td", {}, noteBadge(t90Rating({ ...c, position: t.position }))))))));
+    // évolution
+    const asc = seasons.slice().sort((x, y) => x.season - y.season);
+    const metrics = [["Note TOTAL90", x => t90Rating(x.total)?.note ?? 0, v => fr(v, 1)], ["Buts", x => x.total.goals], ["Passes décisives", x => x.total.assists], ["Minutes", x => x.total.minutes], ["Tirs cadrés", x => x.total.shotsOn], ["Dribbles réussis", x => x.total.dribblesWon], ["Duels gagnés", x => x.total.duelsWon]];
+    let mIdx = 0;
+    const chartBox = h("div", {});
+    const metricBar = h("div", { class: "bar" });
+    const drawChart = () => {
+      put(metricBar, metrics.map((m, i) => h("button", { type: "button", class: "chip", "aria-pressed": String(i === mIdx), onclick: () => { mIdx = i; drawChart(); } }, m[0])));
+      const m = metrics[mIdx];
+      put(chartBox, barChart({ labels: asc.map(x => seasonLabel(x.season)), series: [{ name: m[0], values: asc.map(m[1]), color: "#00C875" }], fmt: m[2] || (v => fr(v)) }));
+    };
+    drawChart();
+    const breakdown = r ? h("div", { class: "panel" }, r.parts.map(p => h("div", { class: "statrow" },
+      h("div", { class: "lab" }, h("span", {}, p.label), h("span", {}, `poids ${Math.round(p.weight * 100)} %`), h("span", {}, p.v == null ? "n.d." : fr(p.v * 100) + " / 100")),
+      h("div", { class: "meter" }, h("i", { style: `--p:${(p.v ?? 0) * 100}%` }))))) : empty("Note indisponible", "Pas assez de minutes jouées ou de statistiques sur cette saison.");
+    put(box, head,
+      h("h2", {}, "Statistiques de la saison"), kpis,
+      h("div", { class: "grid-2" },
+        h("div", {}, h("h2", {}, "Évolution"), h("div", { class: "panel" }, metricBar, chartBox, h("p", { class: "updated" }, "Survolez ou touchez une barre pour voir la valeur exacte.")),
+          h("h2", {}, "Par compétition"), comps),
+        h("aside", {}, h("h2", {}, "Détail de la note"), breakdown, ratingDoc(),
+          h("h2", {}, "Comparer avec un autre joueur"), h("div", { class: "panel" }, playerPicker(p => { location.hash = `#/joueur/${id}?vs=${p.id}`; })))),
+      b ? compareBlock(P, b.data, sel) : null,
+      updatedLine(a));
+    if (b) setTimeout(() => $("#compare", root)?.scrollIntoView({ behavior: "smooth" }), 50);
+  };
+  draw();
+}
+function compareBlock(A, B, selA) {
+  const ta = (A.seasons.find(x => String(x.season) === selA) || A.seasons[0])?.total;
+  const sb = B.seasons[0], tb = sb?.total;
+  if (!ta || !tb) return h("section", { id: "compare" }, h("h2", {}, "Comparaison"), empty("Comparaison impossible", "Un des deux joueurs n’a pas de statistiques disponibles."));
+  const ra = t90Rating(ta), rb = t90Rating(tb);
+  const p90 = (t, v) => t.minutes ? (v / t.minutes) * 90 : 0;
+  const rows = [
+    ["Note TOTAL90", ra?.note, rb?.note, 1], ["Matchs", ta.apps, tb.apps], ["Minutes", ta.minutes, tb.minutes],
+    ["Buts", ta.goals, tb.goals], ["Passes décisives", ta.assists, tb.assists], ["Buts par 90 min", p90(ta, ta.goals), p90(tb, tb.goals), 2],
+    ["Passes déc. par 90 min", p90(ta, ta.assists), p90(tb, tb.assists), 2], ["Tirs cadrés par 90 min", p90(ta, ta.shotsOn), p90(tb, tb.shotsOn), 2],
+    ["Passes clés par 90 min", p90(ta, ta.keyPasses), p90(tb, tb.keyPasses), 2], ["Dribbles réussis par 90 min", p90(ta, ta.dribblesWon), p90(tb, tb.dribblesWon), 2],
+    ["Duels gagnés (%)", ta.duels ? (ta.duelsWon / ta.duels) * 100 : null, tb.duels ? (tb.duelsWon / tb.duels) * 100 : null], ["Précision des passes (%)", ta.passAcc, tb.passAcc],
+    ["Tacles + interceptions par 90", p90(ta, ta.tackles + ta.interceptions), p90(tb, tb.tackles + tb.interceptions), 2]
+  ];
+  const c = (v, hi) => Math.max(0, Math.min(1, (v || 0) / hi));
+  const prof = t => [c(p90(t, t.goals), .8), c(p90(t, t.assists), .4), c(p90(t, t.shotsOn), 2), c(p90(t, t.keyPasses), 3), c(p90(t, t.dribblesWon), 2), c(p90(t, t.tackles + t.interceptions), 4), c(t.duels ? (t.duelsWon / t.duels) * 100 : 0, 70)];
+  return h("section", { id: "compare" }, h("h2", {}, `Comparaison : ${A.player.name} et ${B.player.name}`),
+    h("p", { class: "updated" }, `${A.player.name} : saison ${seasonLabel(selA)} · ${B.player.name} : saison ${seasonLabel(sb.season)}. `, h("a", { href: `#/joueur/${B.player.id}` }, `Voir la fiche de ${B.player.name}`)),
+    h("div", { class: "grid-2" },
+      h("div", { class: "panel table-wrap" }, h("table", { class: "standings cmp" },
+        h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, A.player.name), h("th", {}, B.player.name))),
+        h("tbody", {}, rows.map(([l, x, y, d]) => h("tr", {}, h("td", {}, l), h("td", { class: x != null && y != null && x > y ? "best" : "" }, fr(x, d || 0)), h("td", { class: x != null && y != null && y > x ? "best" : "" }, fr(y, d || 0))))))),
+      h("div", { class: "panel" }, radar(["Buts", "Passes déc.", "Tirs cadrés", "Passes clés", "Dribbles", "Récupérations", "Duels"],
+        [{ name: A.player.name, values: prof(ta), color: "#00C875" }, { name: B.player.name, values: prof(tb), color: "#9299A5" }]),
+        h("p", { class: "updated" }, "Profil par 90 minutes, chaque axe ramené sur une échelle commune."))));
+}
+
+/* ---------- meilleures performances (meilleurs buteurs d'une compétition, notés) ---------- */
+async function topPerformers(box, leagueId, limit, ctx) {
+  put(box, skeleton(2));
+  try {
+    const leagues = (await api("leagues", { ttl: 3600000 })).data;
+    const lg = leagues.find(l => l.id === leagueId);
+    if (!lg?.season) { put(box, empty("Compétition indisponible", "")); return; }
+    const body = await api(`topscorers?league=${leagueId}&season=${lg.season}`, { ttl: 600000 });
+    if (ctx && !ctx.alive()) return;
+    const rows = body.data.map(x => ({ ...x, r: t90Rating(x.total) })).filter(x => x.r).sort((a, b) => b.r.note - a.r.note).slice(0, limit);
+    put(box, rows.length ? h("div", { class: "group" }, rows.map((x, i) => h("a", { class: "row perf", href: `#/joueur/${x.player.id}` },
+      h("span", { class: "when" }, i + 1), h("span", { class: "tm" }, img(x.player.photo, "round"), h("span", {}, h("b", {}, x.player.name), h("small", { class: "updated" }, ` · ${x.team?.name || ""} · ${x.total.goals} buts, ${x.total.assists} passes déc.`))), noteBadge(x.r))))
+      : empty("Pas encore de données", "Les statistiques de la saison ne sont pas disponibles."),
+      h("p", { class: "updated" }, `Parmi les meilleurs buteurs de ${lg.name} ${seasonLabel(lg.season)}, classés par note TOTAL90.`));
+  } catch (e) { put(box, stateBox(e)); }
+}
+
+/* ---------- rubrique Analyses ---------- */
+async function viewAnalyses(root, ctx, params) {
+  const leagueId = Number(params.get("ligue")) || 61;
+  const choices = [61, 39, 140, 78, 135, 2, 88, 94, 307, 71, 253, 200];
+  const sel = h("select", { class: "field", "aria-label": "Compétition", onchange: e => { location.hash = `#/analyses?ligue=${e.target.value}`; } });
+  const top = h("div", {});
+  root.append(h("h1", {}, "Analyses"), h("p", { class: "sub" }, "Statistiques détaillées des joueurs, note TOTAL90, comparaisons et analyses des équipes, à partir de données réelles."),
+    h("div", { class: "grid-2" },
+      h("div", {}, h("h2", {}, "Meilleures performances"), h("div", { class: "bar" }, sel), top),
+      h("aside", {}, h("h2", {}, "Analyser un joueur"), h("div", { class: "panel" }, playerPicker(p => { location.hash = `#/joueur/${p.id}`; })),
+        h("h2", {}, "Analyser une équipe"), h("div", { class: "panel" }, "Recherchez un club ou une sélection avec la barre en haut de page : sa fiche affiche forme, bilan domicile et extérieur, buts par période de jeu et comparaison avec les autres équipes du championnat."),
+        h("h2", {}, "Comparer deux joueurs"), h("div", { class: "panel" }, "Ouvrez la fiche d’un joueur, puis utilisez « Comparer avec un autre joueur »."),
+        ratingDoc())));
+  try {
+    const leagues = (await api("leagues", { ttl: 3600000 })).data;
+    put(sel, choices.map(id => leagues.find(l => l.id === id)).filter(Boolean).map(l => { const o = h("option", { value: l.id }, `${l.name} (${place(l.country)})`); if (l.id === leagueId) o.selected = true; return o; }));
+  } catch {}
+  topPerformers(top, leagueId, 20, ctx);
+}
+
+/* ---------- statistiques avancées d'équipe ---------- */
+async function teamAdvanced(box, d, tid) {
+  const lg = d.standing?.league || d.competitions?.find(c => c.type === "League") || d.competitions?.[0];
+  if (!lg) { put(box, empty("Statistiques avancées indisponibles", "Aucune compétition en cours trouvée pour cette équipe.")); return; }
+  put(box, skeleton(2));
+  let s;
+  try { s = (await api(`teamstats?team=${tid}&league=${lg.id}&season=${lg.season}`, { ttl: 600000 })).data; }
+  catch (e) { put(box, stateBox(e)); return; }
+  const kpi = (v, l) => h("div", { class: "kpi" }, h("b", {}, v), h("span", {}, l));
+  const pct = (a, b) => b ? fr((a / b) * 100) + " %" : "–";
+  const split = h("div", { class: "panel table-wrap" }, h("table", { class: "standings split" },
+    h("thead", {}, h("tr", {}, ["", "J", "V", "N", "D", "BP", "BC", "Moy. BP", "Moy. BC"].map(x => h("th", {}, x)))),
+    h("tbody", {}, [["Domicile", "home"], ["Extérieur", "away"], ["Total", "total"]].map(([l, k]) => h("tr", {}, h("td", {}, l),
+      ...[s.played[k], s.wins[k], s.draws[k], s.loses[k], s.goalsFor[k], s.goalsAgainst[k]].map(v => h("td", {}, v)), h("td", {}, fr(s.avgFor[k], 1)), h("td", {}, fr(s.avgAgainst[k], 1)))))));
+  const slots = ["0-15", "16-30", "31-45", "46-60", "61-75", "76-90", "91-105", "106-120"].filter(k => !["91-105", "106-120"].includes(k) || (s.minutesFor[k] || 0) + (s.minutesAgainst[k] || 0) > 0);
+  const rows = d.standing?.rows || [];
+  const leagueAvg = (f) => rows.length ? rows.reduce((a, r) => a + f(r), 0) / rows.length : null;
+  const gfpm = r => r.played ? r.gf / r.played : 0, gapm = r => r.played ? r.ga / r.played : 0;
+  const avgF = leagueAvg(gfpm), avgA = leagueAvg(gapm);
+  const offIdx = avgF ? (s.avgFor.total / avgF) * 100 : null, defIdx = avgA && s.avgAgainst.total ? (avgA / s.avgAgainst.total) * 100 : null;
+  put(box,
+    h("p", { class: "updated" }, `${s.league.name} · saison ${seasonLabel(s.league.season)}`),
+    h("div", { class: "kpis" },
+      kpi(fr(s.avgFor.total, 1), "Buts marqués par match"), kpi(fr(s.avgAgainst.total, 1), "Buts encaissés par match"),
+      kpi(pct(s.cleanSheet.total, s.played.total), `Matchs sans encaisser (${s.cleanSheet.total})`), kpi(pct(s.failedToScore.total, s.played.total), `Matchs sans marquer (${s.failedToScore.total})`),
+      offIdx != null ? kpi(fr(offIdx) , "Efficacité offensive (100 = moyenne du championnat)") : null,
+      defIdx != null ? kpi(fr(defIdx), "Solidité défensive (100 = moyenne du championnat)") : null,
+      s.biggest.streakWins ? kpi(s.biggest.streakWins, "Plus longue série de victoires") : null),
+    h("h3", { style: "margin:18px 0 8px" }, "Domicile et extérieur"), split,
+    h("h3", { style: "margin:18px 0 8px" }, "Buts par période de jeu"),
+    h("div", { class: "panel" }, barChart({ labels: slots.map(k => k + "’"), series: [{ name: "Marqués", values: slots.map(k => s.minutesFor[k] || 0), color: "#00C875" }, { name: "Encaissés", values: slots.map(k => s.minutesAgainst[k] || 0), color: "#9299A5" }] })),
+    rows.length > 2 ? [h("h3", { style: "margin:18px 0 8px" }, "Comparaison avec les autres équipes"),
+      h("div", { class: "panel" }, barChart({ labels: rows.map(r => r.team.name.length > 9 ? r.team.name.slice(0, 8) + "…" : r.team.name), series: [{ name: "Buts marqués par match", values: rows.map(gfpm), color: "#00C875", highlight: rows.map(r => r.team.id === tid) }, { name: "Buts encaissés par match", values: rows.map(gapm), color: "#9299A5", highlight: rows.map(r => r.team.id === tid) }], fmt: v => fr(v, 1), height: 240 }),
+        h("p", { class: "updated" }, "Survolez une barre pour voir l’équipe et la valeur."))] : null,
+    s.formations.length ? h("p", { class: "updated", style: "margin-top:12px" }, "Systèmes utilisés : " + s.formations.slice(0, 4).map(f => `${f.formation} (${f.played})`).join(", ")) : null,
+    h("p", { class: "updated" }, "La possession moyenne sur la saison n’est pas fournie par le fournisseur ; elle est visible sur chaque fiche de match."));
+}
+
 /* ---------- routeur ---------- */
 const ROUTES = [
   [/^\/$/, viewHome], [/^\/live$/, viewLive], [/^\/football$/, viewFootball], [/^\/match\/(\d+)$/, viewMatch],
   [/^\/equipe\/(\d+)$/, viewTeam], [/^\/competition\/(\d+)$/, viewLeague], [/^\/competitions$/, viewCompetitions],
-  [/^\/recherche$/, viewSearch], [/^\/favoris$/, viewFavorites], [/^\/(basketball|tennis|autres-sports|actualites|analyses)$/, viewSoon]
+  [/^\/recherche$/, viewSearch], [/^\/favoris$/, viewFavorites], [/^\/joueur\/(\d+)$/, viewPlayer], [/^\/analyses$/, viewAnalyses], [/^\/(basketball|tennis|autres-sports|actualites)$/, viewSoon]
 ];
 let current = null;
 function router() {

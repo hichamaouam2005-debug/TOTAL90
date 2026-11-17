@@ -30,16 +30,26 @@ Le glisser-déposer de Netlify ne suffit pas ici, car le site a maintenant un ba
 
 Pour les mises à jour suivantes : remplacez les fichiers sur GitHub, Netlify redéploie tout seul.
 
+## Version 100 % gratuite (réglage par défaut)
+
+Le site est réglé pour l'offre gratuite d'API-Football (environ 100 requêtes par jour) :
+
+- Les scores du jour sont relevés au maximum une fois toutes les 30 minutes, et partagés entre tous les visiteurs grâce au cache. Le site l'indique clairement sous les scores.
+- La page Live réutilise les mêmes données que les matchs du jour, sans requête en plus.
+- Les fiches clubs, compétitions et les recherches sont gardées en cache une journée ou une demi-journée.
+- L'offre gratuite limite aussi les saisons accessibles. Si la saison en cours n'est pas incluse, le site affiche « Données non incluses dans l'abonnement » au lieu d'inventer quoi que ce soit.
+
+Concrètement : parfait pour tester et montrer le site à quelques personnes. Le jour où vous voulez du vrai direct pour un public, prenez une offre payante et ajoutez dans Netlify la variable `PLAN` avec la valeur `paid` : le site repasse automatiquement en actualisation rapide, sans autre modification.
+
 ## Bon à savoir sur les données
 
-- L'offre gratuite d'API-Football est limitée (environ 100 requêtes par jour et un accès restreint à certaines saisons). Elle suffit pour tester. Pour un site public avec du direct, il faut une offre payante. Le site affiche un message clair si une donnée n'est pas incluse dans l'abonnement ou si le quota est atteint.
 - Le cache de Netlify partage chaque réponse entre tous les visiteurs pendant quelques secondes à quelques heures selon le type de données : 1 000 visiteurs sur la page Live ne coûtent qu'une requête toutes les 15 secondes.
 - Pour changer de fournisseur, on écrit un nouvel adaptateur dans `netlify/lib/` sur le modèle de `api-football.mjs`, sans toucher au reste du site.
 
 ## Feuille de route
 
 - **Étape 1 (livrée)** : identité, accueil, live, matchs, fiches match, club et compétition, pays, recherche, favoris, mobile, backend.
-- **Étape 2** : analyses des joueurs (matchs, buts, passes, minutes, tirs cadrés, passes réussies, dribbles, duels, cartons), note sur 10 calculée et documentée, comparaisons et graphiques ; statistiques avancées des équipes (possession, domicile/extérieur, efficacité, comparaisons).
+- **Étape 2 (livrée)** : fiches joueurs (matchs, buts, passes décisives, minutes, tirs cadrés, passes réussies, passes clés, dribbles, duels, tacles et interceptions, cartons) sur les 3 dernières saisons, note TOTAL90 sur 10 calculée et documentée, graphiques d'évolution, comparaison de deux joueurs (tableau et radar), meilleures performances par championnat ; statistiques avancées des équipes (forme, domicile/extérieur, buts par période de jeu, matchs sans encaisser ou sans marquer, efficacité offensive et solidité défensive comparées au championnat). La possession moyenne sur une saison n'est pas fournie par le fournisseur : elle reste visible match par match.
 - **Étape 3** : actualités automatiques depuis des médias reconnus (titre, image, résumé, date, source, lien), par catégorie, et fil personnalisé selon les favoris.
 - **Étape 4** : Match Analysis, avec probabilités de victoire, nul, les deux équipes marquent, plus/moins de 2,5 buts, score le plus probable, calculées par un modèle statistique documenté, avec date de calcul, niveau de confiance et facteurs.
 - **Étape 5** : basketball, tennis et autres sports avec leurs fournisseurs de données.
