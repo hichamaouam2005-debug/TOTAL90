@@ -96,7 +96,9 @@ function standingRow(r) {
   return {
     rank: r.rank, team: team(r.team), points: r.points, diff: r.goalsDiff, group: r.group, form: r.form || "",
     description: r.description || null, played: r.all?.played, win: r.all?.win, draw: r.all?.draw, lose: r.all?.lose,
-    gf: r.all?.goals?.for, ga: r.all?.goals?.against
+    gf: r.all?.goals?.for, ga: r.all?.goals?.against,
+    hp: r.home?.played ?? null, hgf: r.home?.goals?.for ?? null, hga: r.home?.goals?.against ?? null,
+    ap: r.away?.played ?? null, agf: r.away?.goals?.for ?? null, aga: r.away?.goals?.against ?? null
   };
 }
 
@@ -244,6 +246,11 @@ export function apiFootball(key) {
         const comps = (x.statistics || []).map(compStats);
         return { player: profile(x.player), team: comps[0]?.team || null, total: aggregate(comps) };
       });
+    },
+
+    async standings(league, season) {
+      const r = await call("standings", { league, season }, key);
+      return r[0] ? r[0].league.standings.map(g => g.map(standingRow)) : [];
     },
 
     async teamStats(team, league, season) {
