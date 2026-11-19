@@ -151,11 +151,12 @@ async function viewHome(root, ctx) {
         h("h2", {}, "Résultats récents", h("a", { class: "more", href: `#/football?date=${addDays(TODAY(), -1)}` }, "Hier")), h("div", { id: "home-res" }, skeleton(2))),
       h("aside", {}, h("h2", {}, "Mes favoris", h("a", { class: "more", href: "#/favoris" }, "Gérer")), h("div", { id: "home-fav" }),
         h("h2", {}, "Compétitions populaires", h("a", { class: "more", href: "#/competitions" }, "Toutes")), h("div", { id: "home-comps" }, skeleton(2)),
-        h("h2", {}, "Actualités"), soonPanel(3, "Les dernières actualités de sources reconnues, avec titre, image, résumé, source et lien vers l’article."),
+        h("h2", {}, "Actualités", h("a", { class: "more", href: "#/actualites" }, "Toutes")), h("div", { id: "home-news" }, skeleton(2)),
         h("h2", {}, "Meilleures performances", h("a", { class: "more", href: "#/analyses" }, "Analyses")), h("div", { id: "home-perf" })))
   );
   renderHomeComps($("#home-comps", root));
   topPerformers($("#home-perf", root), 61, 5, ctx);
+  homeNews($("#home-news", root));
   const load = async () => {
     let today, yesterday;
     try {
@@ -377,9 +378,10 @@ async function viewTeam(root, ctx, params, id) {
         h("h2", {}, "Classement"), d.standing ? standingTable(d.standing.rows, tid, d.standing.league) : empty("Classement indisponible", "Pas de championnat en cours trouvé pour cette équipe."),
         d.competitions?.length ? [h("h2", {}, "Compétitions"), h("div", { class: "comps" }, d.competitions.map(compTile))] : null,
         
-        h("h2", {}, "Actualités du club"), soonPanel(3, "Les dernières informations sur le club, issues de sources reconnues."))),
+        h("h2", {}, "Actualités du club"), h("div", { id: "team-news" }))),
     updatedLine(body));
   teamAdvanced($("#team-adv", root), d, tid);
+  teamNews($("#team-news", root), t.name);
 }
 function standingTable(rows, highlight, league) {
   return h("div", { class: "panel table-wrap" },
@@ -487,7 +489,6 @@ const SOON = {
   basketball: ["Basketball", 5, "NBA, EuroLeague et championnats nationaux : matchs en direct, résultats, classements et fiches d’équipes, via un fournisseur de données basket."],
   tennis: ["Tennis", 5, "Tournois ATP et WTA, Grand Chelem, résultats en direct et classements, via un fournisseur spécialisé tennis."],
   "autres-sports": ["Autres sports", 5, "Formule 1, sports de combat, rugby, athlétisme… avec des fournisseurs de données dédiés à chaque discipline."],
-  actualites: ["Actualités", 3, "Football, mercato, basket, tennis, F1, athlétisme, sports de combat : titre, image, résumé, date, source et lien vers l’article original, récupérés automatiquement depuis des médias reconnus."]
 };
 function viewSoon(root, ctx, params, key) {
   const [title, step, text] = SOON[key];
@@ -767,11 +768,93 @@ async function teamAdvanced(box, d, tid) {
     h("p", { class: "updated" }, "La possession moyenne sur la saison n’est pas fournie par le fournisseur ; elle est visible sur chaque fiche de match."));
 }
 
+/* ================= ÉTAPE 3 : ACTUALITÉS ================= */
+const NEWS_CATS = [["all", "Tout"], ["foryou", "Pour vous"], ["football", "Football"], ["mercato", "Mercato"], ["basketball", "Basketball"], ["tennis", "Tennis"], ["f1", "Formule 1"], ["athletisme", "Athlétisme"], ["combat", "Sports de combat"], ["autres", "Autres sports"]];
+const CAT_LABEL = Object.fromEntries(NEWS_CATS);
+const CAT_ICON = { football: "⚽", mercato: "⇄", basketball: "🏀", tennis: "🎾", f1: "🏎", athletisme: "🏃", combat: "🥊", autres: "🏅" };
+function ago(iso) {
+  if (!iso) return "";
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return "à l’instant";
+  if (m < 60) return `il y a ${m} min`;
+  if (m < 60 * 24) return `il y a ${Math.round(m / 60)} h`;
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + " à " + hm(iso);
+}
+function favTerms() {
+  const f = Fav.read();
+  return [...f.teams.map(t => t.name), ...f.leagues.map(l => l.name)].map(n => n.toLowerCase()).filter(n => n.length >= 3);
+}
+const matchesTerms = (it, terms) => { const t = `${it.title} ${it.summary}`.toLowerCase(); return terms.some(x => t.includes(x)); };
+function newsCard(it, big) {
+  const visual = it.image ? h("img", { src: it.image, alt: "", loading: "lazy", referrerpolicy: "no-referrer", onerror: e => e.target.replaceWith(h("div", { class: "news-ph" }, CAT_ICON[it.category] || "🏅")) }) : h("div", { class: "news-ph" }, CAT_ICON[it.category] || "🏅");
+  return h("a", { class: "news" + (big ? " big" : ""), href: it.link, target: "_blank", rel: "noopener noreferrer" },
+    h("div", { class: "news-img" }, visual, h("span", { class: "news-cat" }, CAT_LABEL[it.category] || "Sport")),
+    h("div", { class: "news-body" },
+      h("h3", {}, it.title),
+      it.summary ? h("p", {}, it.summary) : null,
+      h("div", { class: "news-meta" }, h("b", {}, it.source), it.lang === "en" ? h("span", { class: "lang" }, "EN") : null, h("span", {}, ago(it.date)), h("span", { class: "out" }, "Lire l’article ↗"))));
+}
+async function loadNews() { return (await api("news", { ttl: 300000 })).data; }
+
+async function viewNews(root, ctx, params) {
+  let cat = NEWS_CATS.some(c => c[0] === params.get("cat")) ? params.get("cat") : "all", text = "";
+  const chips = h("div", { class: "bar news-chips" });
+  const list = h("div", {}, skeleton(4));
+  const srcBox = h("div", {});
+  root.append(h("h1", {}, "Actualités"), h("p", { class: "sub" }, "Les dernières informations sportives, récupérées automatiquement auprès de médias reconnus. Chaque article renvoie vers sa source."),
+    chips, h("div", { class: "bar" }, h("input", { class: "field wide", type: "search", placeholder: "Filtrer : club, joueur, compétition…", "aria-label": "Filtrer les actualités", oninput: e => { text = e.target.value.toLowerCase().trim(); draw(); } })),
+    list, h("h2", {}, "Sources"), srcBox);
+  let data = null, body = null;
+  const draw = () => {
+    put(chips, NEWS_CATS.map(([k, l]) => h("button", { type: "button", class: "chip", "aria-pressed": String(cat === k), onclick: () => { cat = k; draw(); } }, l)));
+    if (!data) return;
+    const terms = favTerms();
+    let items = data.items;
+    if (cat === "foryou") items = terms.length ? items.filter(it => matchesTerms(it, terms)) : [];
+    else if (cat !== "all") items = items.filter(it => it.category === cat);
+    if (text) items = items.filter(it => `${it.title} ${it.summary} ${it.source}`.toLowerCase().includes(text));
+    if (cat === "foryou" && !terms.length) { put(list, empty("Votre fil personnalisé est vide", "Suivez des équipes ou des compétitions (bouton « Suivre ») : les actualités qui les mentionnent apparaîtront ici.")); return; }
+    if (!items.length) { put(list, empty("Aucune actualité dans cette catégorie pour le moment", cat === "foryou" ? "Aucun article récent ne mentionne vos équipes ou compétitions suivies." : "Essayez une autre catégorie.")); return; }
+    const [first, ...rest] = items;
+    put(list, h("div", { class: "news-grid" }, newsCard(first, true), rest.slice(0, 59).map(it => newsCard(it))), updatedLine(body));
+  };
+  draw();
+  try { data = await loadNews(); body = { fetchedAt: new Date().toISOString() }; } catch (e) { if (ctx.alive()) put(list, stateBox(e)); return; }
+  if (!ctx.alive()) return;
+  draw();
+  put(srcBox, h("div", { class: "panel" }, h("ul", { class: "sources" }, data.sources.map(s => h("li", {},
+    h("span", { class: "dot2 " + (s.ok ? "ok" : "ko") }), h("a", { href: s.site, target: "_blank", rel: "noopener noreferrer" }, s.name), ` · ${CAT_LABEL[s.category] || "Généraliste"}${s.lang === "en" ? " (en anglais)" : ""} · `,
+    s.ok ? `${s.count} articles` : "indisponible pour le moment")))),
+    h("p", { class: "updated" }, "Les titres et résumés proviennent des flux RSS publics de ces médias ; l’article complet se lit sur leur site. Les actualités sont rafraîchies toutes les 15 minutes."));
+  ctx.every(900000, async () => { try { cache.clear(); data = await loadNews(); draw(); } catch {} });
+}
+
+async function homeNews(box) {
+  try {
+    const d = await loadNews();
+    const terms = favTerms();
+    const mine = terms.length ? d.items.filter(it => matchesTerms(it, terms)).slice(0, 2) : [];
+    const top = [...mine, ...d.items.filter(it => !mine.includes(it) && it.lang === "fr")].slice(0, 5);
+    put(box, top.length ? h("div", { class: "news-list" }, top.map(it => h("a", { class: "news-line", href: it.link, target: "_blank", rel: "noopener noreferrer" },
+      it.image ? h("img", { src: it.image, alt: "", loading: "lazy", referrerpolicy: "no-referrer", onerror: e => e.target.remove() }) : null,
+      h("div", {}, h("b", {}, it.title), h("small", {}, `${CAT_LABEL[it.category]} · ${it.source} · ${ago(it.date)}`))))) : empty("Pas d’actualité pour le moment", ""));
+  } catch (e) { put(box, stateBox(e)); }
+}
+async function teamNews(box, teamName) {
+  try {
+    const d = await loadNews();
+    const n = teamName.toLowerCase();
+    const items = d.items.filter(it => `${it.title} ${it.summary}`.toLowerCase().includes(n)).slice(0, 6);
+    put(box, items.length ? h("div", { class: "news-list" }, items.map(it => h("a", { class: "news-line", href: it.link, target: "_blank", rel: "noopener noreferrer" },
+      h("div", {}, h("b", {}, it.title), h("small", {}, `${it.source} · ${ago(it.date)}`))))) : empty("Pas d’actualité récente", `Aucun article récent de nos sources ne mentionne ${teamName}.`));
+  } catch (e) { put(box, stateBox(e)); }
+}
+
 /* ---------- routeur ---------- */
 const ROUTES = [
   [/^\/$/, viewHome], [/^\/live$/, viewLive], [/^\/football$/, viewFootball], [/^\/match\/(\d+)$/, viewMatch],
   [/^\/equipe\/(\d+)$/, viewTeam], [/^\/competition\/(\d+)$/, viewLeague], [/^\/competitions$/, viewCompetitions],
-  [/^\/recherche$/, viewSearch], [/^\/favoris$/, viewFavorites], [/^\/joueur\/(\d+)$/, viewPlayer], [/^\/analyses$/, viewAnalyses], [/^\/(basketball|tennis|autres-sports|actualites)$/, viewSoon]
+  [/^\/recherche$/, viewSearch], [/^\/favoris$/, viewFavorites], [/^\/joueur\/(\d+)$/, viewPlayer], [/^\/analyses$/, viewAnalyses], [/^\/actualites$/, viewNews], [/^\/(basketball|tennis|autres-sports)$/, viewSoon]
 ];
 let current = null;
 function router() {

@@ -1,6 +1,7 @@
 // Backend TOTAL90 : seul endroit qui connaît la clé API.
 // Le navigateur appelle /api/..., jamais le fournisseur directement.
 import { apiFootball, ProviderError } from "../lib/api-football.mjs";
+import { getNews } from "../lib/news.mjs";
 
 const PROVIDERS = { "api-football": apiFootball };
 const memo = new Map(); // cache mémoire de l'instance (complété par le cache CDN de Netlify)
@@ -18,6 +19,7 @@ const PAST_OR_FUTURE = 86400;
 
 // Chaque route : [fonction, durée de cache en secondes]
 const ROUTES = {
+  news: true, // traité à part plus bas
   async matches(p, prov) {
     const date = isDate(p.get("date")) ? p.get("date") : today();
     const data = await prov.matchesByDate(date, tzOf(p));
@@ -81,6 +83,18 @@ export default async req => {
   const [route, id] = url.pathname.replace(/^\/api\/?/, "").split("/").filter(Boolean);
   const handler = ROUTES[route];
   if (!handler) return json({ error: "not_found", message: "Route inconnue." }, 404);
+
+  // Actualités : flux RSS publics, sans clé API ni quota
+  if (route === "news") {
+    const hit = memo.get("news");
+    if (hit && hit.until > Date.now()) return json(hit.data, 200, Math.round((hit.until - Date.now()) / 1000));
+    try {
+      const data = await getNews();
+      const payload = { data, fetchedAt: new Date().toISOString() };
+      memo.set("news", { data: payload, until: Date.now() + 900000 });
+      return json(payload, 200, 900);
+    } catch (e) { return json({ error: "upstream", message: "Les actualités sont momentanément indisponibles." }, 502); }
+  }
 
   const providerName = env("SPORTS_PROVIDER") || "api-football";
   const key = env("API_FOOTBALL_KEY");
