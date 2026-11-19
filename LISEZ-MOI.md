@@ -53,7 +53,24 @@ Concrètement : parfait pour tester et montrer le site à quelques personnes. Le
 - **Étape 3 (livrée)** : actualités automatiques depuis les flux RSS publics de médias reconnus (Maxifoot, L’Équipe, Franceinfo, Le Monde, BBC Sport), avec titre, image, résumé, date, source et lien vers l’article original ; catégories Football, Mercato, Basketball, Tennis, Formule 1, Athlétisme, Sports de combat, Autres ; fil « Pour vous » selon les favoris ; actualités à la une sur l’accueil et sur chaque fiche club. Gratuit, sans consommer le quota API-Football. Les sources se modifient dans `netlify/lib/news.mjs`.
 - **Étape 4 (livrée)** : Match Analysis. Sur chaque match à venir, onglet « Probabilités » : victoire, nul, défaite, les deux équipes marquent, plus/moins de 2,5 buts, score le plus probable et scores probables, buts attendus, facteurs (forme, avantage du terrain, attaque, défense, confrontations directes), date de calcul et niveau de confiance. Modèle documenté sur le site : loi de Poisson avec correction de Dixon-Coles, forces d'attaque et de défense rapportées aux moyennes de la compétition, ajustement de forme limité à 10 %. Liste des grands matchs à venir dans la rubrique Analyses.
 - **Étape 5 (livrée)** : Basketball (matchs NBA du jour avec score par quart-temps, meilleur marqueur, chaîne, classements des conférences), Tennis (ATP et WTA : tournois du jour, matchs set par set avec jeux décisifs, classements mondiaux), Autres sports (Formule 1 : Grand Prix en cours, résultats des séances et calendrier ; UFC : carte du gala, vainqueurs, méthode de victoire et prochains galas). Source : points d'accès JSON publics d'ESPN, gratuits et sans quota, mais non officiels : s'ils changent, la section concernée affiche « indisponible ». Code dans `public/assets/espn.mjs` (utilisé par le serveur et, si ESPN refuse les serveurs, directement par le navigateur du visiteur). Rugby, cyclisme et athlétisme : pas encore de source de résultats gratuite et fiable, ils sont couverts par les Actualités.
-- **Étape 6** : référencement, performance, mentions légales, cookies (RGPD) et monétisation.
+- **Étape 6 (livrée)** : vraies adresses de pages (`/football`, `/match/123`, `/equipe/85`…) lisibles par Google, titres et descriptions propres à chaque page, image de partage pour les réseaux sociaux, `robots.txt` et `sitemap.xml`, installation possible comme une application sur téléphone (manifeste et icônes), police hébergée sur le site (plus rapide, aucun transfert vers Google), en-têtes de sécurité, pages Mentions légales, Confidentialité, Cookies et À propos des données, fenêtre de consentement et emplacements publicitaires prêts mais désactivés. Les anciens liens en `#/…` continuent de fonctionner.
+
+## À faire vous-même : le fichier de réglages
+
+Ouvrez `public/assets/config.js` (sur GitHub : cliquez sur le fichier, puis sur le crayon pour le modifier) et remplissez au minimum votre nom, votre e-mail de contact et le directeur de la publication. Tant que ce n'est pas fait, les pages légales affichent « [à compléter] » en jaune. Vérifiez aussi l'adresse exacte de Netlify dans ses pages légales. Si vous êtes un particulier, vous pouvez ne pas publier votre adresse, à condition que vos coordonnées soient connues de l'hébergeur.
+
+Ces textes sont des modèles sérieux mais ils ne remplacent pas l'avis d'un juriste.
+
+## Monétisation : ce qu'il faut savoir avant d'activer la publicité
+
+Tout est prêt techniquement, mais rien n'est activé, et c'est volontaire :
+
+1. **Un nom de domaine à vous** (environ 10 € par an) est en pratique nécessaire pour Google AdSense, car il faut pouvoir placer un fichier `ads.txt` à la racine du domaine, ce qui est impossible sur une adresse en `.netlify.app`.
+2. **Le consentement** : en Europe, AdSense exige une fenêtre de consentement certifiée par Google. Elle est gratuite : dans AdSense, rubrique « Confidentialité et messages ». Le réglage `cmp: "google"` est déjà prévu pour que TOTAL90 n'affiche pas une deuxième fenêtre.
+3. **Les droits sur les données** — le point le plus important. Avant de gagner de l'argent avec le site, vérifiez les conditions de chaque source : l'offre gratuite d'API-Football, les flux RSS des médias (certains les réservent à un usage personnel) et surtout les données ESPN, qui ne sont pas proposées officiellement : les utiliser sur un site commercial est risqué. Pour un site rentable, il faudra passer à des sources sous licence payantes.
+4. **Paris sportifs** : la publicité ou l'affiliation pour des sites de paris est très encadrée en France (opérateurs agréés par l'ANJ uniquement, mentions obligatoires). À éviter sans conseil.
+
+Quand tout est réglé : dans `config.js`, mettez `enabled: true` et votre identifiant `client` (« ca-pub-… »), ajoutez un fichier `public/ads.txt` avec la ligne fournie par AdSense, et renvoyez les fichiers.
 
 ## Structure
 

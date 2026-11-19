@@ -107,7 +107,7 @@ function matchRow(m, opts = {}) {
   const live = m.status.state === "live", done = m.status.state === "finished";
   const side = t => h("div", { class: "tm" + (t.winner ? " w" : "") + (favT.includes(t.id) ? " fav" : "") }, img(t.logo), h("span", {}, t.name));
   const sc = v => h("span", {}, v ?? (m.status.state === "scheduled" ? "" : "–"));
-  return h("a", { class: "row", href: `#/match/${m.id}`, "aria-label": `${m.home.name} contre ${m.away.name}` },
+  return h("a", { class: "row", href: `/match/${m.id}`, "aria-label": `${m.home.name} contre ${m.away.name}` },
     h("span", { class: "when" + (live ? " live" : "") }, opts.showDate && !live && ymd(new Date(m.date)) !== TODAY() ? [dayLabel(m.date), h("br"), done ? clock(m) : hm(m.date)] : clock(m)),
     h("span", { class: "teams" }, side(m.home), side(m.away)),
     h("span", { class: "sc" + (live ? " live" : "") }, sc(m.score.home), sc(m.score.away)));
@@ -124,12 +124,12 @@ function groupBlock(g, opts) {
   const l = g.league;
   return h("section", { class: "group" },
     h("div", { class: "ghead" }, img(l.logo),
-      h("div", {}, h("a", { href: `#/competition/${l.id}` }, l.name), h("br"), h("small", {}, [place(l.country), l.round].filter(Boolean).join(" · "))),
+      h("div", {}, h("a", { href: `/competition/${l.id}` }, l.name), h("br"), h("small", {}, [place(l.country), l.round].filter(Boolean).join(" · "))),
       starButton("leagues", { id: l.id, name: l.name, logo: l.logo, country: l.country })),
     g.matches.map(m => matchRow(m, opts)));
 }
 function liveCard(m) {
-  return h("a", { class: "lcard", href: `#/match/${m.id}` },
+  return h("a", { class: "lcard", href: `/match/${m.id}` },
     h("div", { class: "lg" }, img(m.league.logo), `${m.league.name} · ${place(m.league.country) || ""}`),
     h("div", { class: "t" }, img(m.home.logo), h("span", {}, m.home.name), h("b", {}, m.score.home ?? 0)),
     h("div", { class: "t" }, img(m.away.logo), h("span", {}, m.away.name), h("b", {}, m.score.away ?? 0)),
@@ -147,12 +147,12 @@ async function viewHome(root, ctx) {
       h("p", { class: "sub" }, longDate(TODAY()))), h("div", { class: "count", id: "live-count" })),
     h("div", { id: "home-live" }, skeleton(1)),
     h("div", { class: "grid-2" },
-      h("div", {}, h("h2", {}, "Grands matchs du jour", h("a", { class: "more", href: "#/football" }, "Tous les matchs")), h("div", { id: "home-big" }, skeleton(3)),
-        h("h2", {}, "Résultats récents", h("a", { class: "more", href: `#/football?date=${addDays(TODAY(), -1)}` }, "Hier")), h("div", { id: "home-res" }, skeleton(2))),
-      h("aside", {}, h("h2", {}, "Mes favoris", h("a", { class: "more", href: "#/favoris" }, "Gérer")), h("div", { id: "home-fav" }),
-        h("h2", {}, "Compétitions populaires", h("a", { class: "more", href: "#/competitions" }, "Toutes")), h("div", { id: "home-comps" }, skeleton(2)),
-        h("h2", {}, "Actualités", h("a", { class: "more", href: "#/actualites" }, "Toutes")), h("div", { id: "home-news" }, skeleton(2)),
-        h("h2", {}, "Meilleures performances", h("a", { class: "more", href: "#/analyses" }, "Analyses")), h("div", { id: "home-perf" })))
+      h("div", {}, h("h2", {}, "Grands matchs du jour", h("a", { class: "more", href: "/football" }, "Tous les matchs")), h("div", { id: "home-big" }, skeleton(3)),
+        adSlot("accueil"), h("h2", {}, "Résultats récents", h("a", { class: "more", href: `/football?date=${addDays(TODAY(), -1)}` }, "Hier")), h("div", { id: "home-res" }, skeleton(2))),
+      h("aside", {}, h("h2", {}, "Mes favoris", h("a", { class: "more", href: "/favoris" }, "Gérer")), h("div", { id: "home-fav" }),
+        h("h2", {}, "Compétitions populaires", h("a", { class: "more", href: "/competitions" }, "Toutes")), h("div", { id: "home-comps" }, skeleton(2)),
+        h("h2", {}, "Actualités", h("a", { class: "more", href: "/actualites" }, "Toutes")), h("div", { id: "home-news" }, skeleton(2)),
+        h("h2", {}, "Meilleures performances", h("a", { class: "more", href: "/analyses" }, "Analyses")), h("div", { id: "home-perf" })))
   );
   renderHomeComps($("#home-comps", root));
   topPerformers($("#home-perf", root), 61, 5, ctx);
@@ -184,7 +184,7 @@ async function viewHome(root, ctx) {
     const mine = (all || []).filter(m => fav.teams.some(t => t.id === m.home.id || t.id === m.away.id));
     put(box, 
       ...(mine.length ? groupMatches(mine).map(g => groupBlock(g)) : [h("div", { class: "panel" }, "Aucun match de vos équipes aujourd’hui.")]),
-      h("div", { class: "comps", style: "margin-top:10px" }, fav.teams.slice(0, 6).map(t => h("a", { class: "comp", href: `#/equipe/${t.id}` }, img(t.logo), t.name))));
+      h("div", { class: "comps", style: "margin-top:10px" }, fav.teams.slice(0, 6).map(t => h("a", { class: "comp", href: `/equipe/${t.id}` }, img(t.logo), t.name))));
   };
   await load();
   ctx.every(LIVE_REFRESH, load);
@@ -204,7 +204,7 @@ async function renderHomeComps(box) {
     put(box, h("div", { class: "comps" }, HOME_COMPS.map(id => byId.get(id)).filter(Boolean).slice(0, 10).map(compTile)));
   } catch (e) { put(box, stateBox(e)); }
 }
-const compTile = l => h("a", { class: "comp", href: `#/competition/${l.id}` }, img(l.logo), h("span", {}, l.name, h("small", {}, place(l.country))));
+const compTile = l => h("a", { class: "comp", href: `/competition/${l.id}` }, img(l.logo), h("span", {}, l.name, h("small", {}, place(l.country))));
 function soonPanel(step, text) {
   return h("div", { class: "panel soon" }, h("span", { class: "step" }, `Étape ${step}`), h("div", {}, text));
 }
@@ -226,7 +226,7 @@ async function viewLive(root, ctx) {
 async function viewFootball(root, ctx, params) {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") || "") ? params.get("date") : TODAY();
   let filter = params.get("f") || "all", text = "";
-  const go = d => { location.hash = `#/football?date=${d}`; };
+  const go = d => { navigate(`/football?date=${d}`); };
   const filters = [["all", "Tous"], ["live", "En direct"], ["finished", "Terminés"], ["scheduled", "À venir"], ["fav", "Mes favoris"]];
   const chips = h("div", { class: "bar" });
   const search = h("input", { class: "field", type: "search", placeholder: "Filtrer : pays, compétition, équipe", "aria-label": "Filtrer les matchs", oninput: e => { text = e.target.value.toLowerCase(); draw(); } });
@@ -234,7 +234,7 @@ async function viewFootball(root, ctx, params) {
     h("h1", {}, "Football"), h("p", { class: "sub" }, longDate(date)),
     h("div", { class: "bar" },
       h("button", { class: "chip", type: "button", onclick: () => go(addDays(date, -1)) }, "← Veille"),
-      ["Hier", "Aujourd’hui", "Demain"].map((l, i) => { const d = addDays(TODAY(), i - 1); return h("a", { class: "chip" + (d === date ? " on" : ""), href: `#/football?date=${d}` }, l); }),
+      ["Hier", "Aujourd’hui", "Demain"].map((l, i) => { const d = addDays(TODAY(), i - 1); return h("a", { class: "chip" + (d === date ? " on" : ""), href: `/football?date=${d}` }, l); }),
       h("button", { class: "chip", type: "button", onclick: () => go(addDays(date, 1)) }, "Lendemain →"),
       h("input", { class: "field", type: "date", value: date, "aria-label": "Choisir une date", onchange: e => e.target.value && go(e.target.value) })),
     chips, h("div", { class: "bar" }, search), h("div", { id: "fx" }, skeleton(5)));
@@ -270,10 +270,10 @@ async function viewMatch(root, ctx, params, id) {
     try { body = await api(`match/${id}`, { ttl: 15000 }); } catch (e) { if (ctx.alive()) put($("#mx", root), stateBox(e)); return; }
     if (!ctx.alive()) return;
     const m = body.data, live = m.status.state === "live";
-    const teamLink = t => h("a", { href: `#/equipe/${t.id}` }, img(t.logo), t.name);
+    const teamLink = t => h("a", { href: `/equipe/${t.id}` }, img(t.logo), t.name);
     const score = m.status.state === "scheduled" ? h("div", { class: "big" }, hm(m.date)) : h("div", { class: "big" + (live ? " live" : "") }, `${m.score.home ?? 0} – ${m.score.away ?? 0}`);
     const head = h("section", { class: "mhead" },
-      h("div", { class: "meta" }, h("a", { href: `#/competition/${m.league.id}` }, m.league.name), m.league.round ? h("span", {}, m.league.round) : null,
+      h("div", { class: "meta" }, h("a", { href: `/competition/${m.league.id}` }, m.league.name), m.league.round ? h("span", {}, m.league.round) : null,
         h("span", {}, new Date(m.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) + " · " + hm(m.date))),
       h("div", { class: "duel" }, teamLink(m.home), h("div", {}, score, m.penalties ? h("div", { class: "mstatus" }, `T.a.b. ${m.penalties.home} – ${m.penalties.away}`) : null), teamLink(m.away)),
       h("div", { class: "mstatus" + (live ? " live" : "") }, live ? clock(m) + " · " + m.status.label : m.status.label),
@@ -286,8 +286,8 @@ async function viewMatch(root, ctx, params, id) {
       put(content, ...({ resume: () => timeline(m), stats: () => statsBlock(m), compos: () => lineupsBlock(m), h2h: () => h2hBlock(m), proba: () => { probaBlock(m).then(kids => { if (tab === "proba") put(content, kids); }); return skeleton(3); } }[tab])());
     };
     render();
-    put($("#mx", root), head, tabBar, content, updatedLine(body));
-    document.title = `${m.home.name} – ${m.away.name} · TOTAL90`;
+    put($("#mx", root), head, tabBar, content, adSlot("match"), updatedLine(body));
+    setMeta(`${m.home.name} – ${m.away.name}`, `${m.home.name} contre ${m.away.name} (${m.league.name}) : score, buteurs, statistiques, compositions et probabilités.`);
     return live;
   };
   const live = await load();
@@ -320,8 +320,8 @@ function lineupsBlock(m) {
   return [h("div", { class: "lineups" }, m.lineups.map(l => h("div", {},
     h("h3", {}, team(l.teamId).name, l.formation ? ` · ${l.formation}` : ""),
     l.coach ? h("p", { class: "updated" }, `Entraîneur : ${l.coach}`) : null,
-    h("h4", {}, "Titulaires"), h("ol", {}, l.startXI.map(p => h("li", {}, h("b", {}, p.number ?? ""), p.id ? h("a", { href: `#/joueur/${p.id}` }, p.name) : p.name))),
-    l.subs.length ? [h("h4", {}, "Remplaçants"), h("ol", {}, l.subs.map(p => h("li", {}, h("b", {}, p.number ?? ""), p.id ? h("a", { href: `#/joueur/${p.id}` }, p.name) : p.name)))] : null)))];
+    h("h4", {}, "Titulaires"), h("ol", {}, l.startXI.map(p => h("li", {}, h("b", {}, p.number ?? ""), p.id ? h("a", { href: `/joueur/${p.id}` }, p.name) : p.name))),
+    l.subs.length ? [h("h4", {}, "Remplaçants"), h("ol", {}, l.subs.map(p => h("li", {}, h("b", {}, p.number ?? ""), p.id ? h("a", { href: `/joueur/${p.id}` }, p.name) : p.name)))] : null)))];
 }
 function h2hBlock(m) {
   if (m.h2h == null) return [empty("Historique indisponible", "Le fournisseur n’a pas renvoyé les confrontations directes.")];
@@ -345,7 +345,7 @@ async function viewTeam(root, ctx, params, id) {
   try { body = await api(`team/${id}`, { ttl: 300000 }); } catch (e) { if (ctx.alive()) put($("#tx", root), stateBox(e)); return; }
   if (!ctx.alive()) return;
   const d = body.data, t = d.team, tid = Number(id);
-  document.title = `${t.name} · TOTAL90`;
+  setMeta(t.name, `${t.name} : forme, résultats, calendrier, classement, effectif et statistiques avancées.`);
   const last = (d.last || []).filter(m => m.status.state === "finished").sort((a, b) => b.timestamp - a.timestamp);
   const res = last.map(m => resultFor(m, tid)).filter(Boolean);
   const gf = last.reduce((s, m) => s + (m.home.id === tid ? m.score.home : m.score.away), 0);
@@ -358,7 +358,7 @@ async function viewTeam(root, ctx, params, id) {
       .map(([v, l]) => h("div", { class: "kpi" }, h("b", {}, v), h("span", {}, l)))) : null;
   const posFR = { Goalkeeper: "Gardiens", Defender: "Défenseurs", Midfielder: "Milieux", Attacker: "Attaquants" };
   const squad = d.squad == null ? empty("Effectif indisponible", "Le fournisseur n’a pas renvoyé l’effectif.") :
-    Object.entries(posFR).map(([k, l]) => { const ps = d.squad.filter(p => p.position === k); return ps.length ? [h("h3", { style: "margin-top:14px" }, l), h("div", { class: "squad" }, ps.map(p => h("a", { class: "player", href: `#/joueur/${p.id}` }, img(p.photo), h("div", {}, h("b", {}, p.name), h("small", {}, [p.number != null ? `N° ${p.number}` : null, p.age ? `${p.age} ans` : null].filter(Boolean).join(" · "))))))] : null; });
+    Object.entries(posFR).map(([k, l]) => { const ps = d.squad.filter(p => p.position === k); return ps.length ? [h("h3", { style: "margin-top:14px" }, l), h("div", { class: "squad" }, ps.map(p => h("a", { class: "player", href: `/joueur/${p.id}` }, img(p.photo), h("div", {}, h("b", {}, p.name), h("small", {}, [p.number != null ? `N° ${p.number}` : null, p.age ? `${p.age} ans` : null].filter(Boolean).join(" · "))))))] : null; });
   put($("#tx", root), 
     h("section", { class: "panel" },
       h("div", { class: "thead" }, img(t.logo),
@@ -385,11 +385,11 @@ async function viewTeam(root, ctx, params, id) {
 }
 function standingTable(rows, highlight, league) {
   return h("div", { class: "panel table-wrap" },
-    league ? h("p", { class: "updated", style: "margin-top:0" }, h("a", { href: `#/competition/${league.id}` }, league.name), ` · saison ${league.season}/${String(league.season + 1).slice(2)}`) : null,
+    league ? h("p", { class: "updated", style: "margin-top:0" }, h("a", { href: `/competition/${league.id}` }, league.name), ` · saison ${league.season}/${String(league.season + 1).slice(2)}`) : null,
     h("table", { class: "standings" },
       h("thead", {}, h("tr", {}, ["#", "Équipe", "J", "G", "N", "P", "Diff", "Pts"].map(x => h("th", { scope: "col" }, x)))),
       h("tbody", {}, rows.map(r => h("tr", { class: r.team.id === highlight ? "me" : null },
-        h("td", {}, r.rank), h("td", {}, h("a", { href: `#/equipe/${r.team.id}` }, img(r.team.logo), r.team.name)),
+        h("td", {}, r.rank), h("td", {}, h("a", { href: `/equipe/${r.team.id}` }, img(r.team.logo), r.team.name)),
         h("td", {}, r.played), h("td", {}, r.win), h("td", {}, r.draw), h("td", {}, r.lose), h("td", {}, r.diff > 0 ? "+" + r.diff : r.diff), h("td", { class: "pts" }, r.points))))));
 }
 
@@ -400,7 +400,7 @@ async function viewLeague(root, ctx, params, id) {
   try { body = await api(`league/${id}${season ? "?season=" + season : ""}`, { ttl: 300000 }); } catch (e) { if (ctx.alive()) put($("#lx", root), stateBox(e)); return; }
   if (!ctx.alive()) return;
   const d = body.data, l = d.league;
-  document.title = `${l.name} · TOTAL90`;
+  setMeta(l.name, `${l.name} : classement, résultats et prochains matchs.`);
   const seasons = [...(l.seasons || [])].sort((a, b) => b - a);
   const groups = d.standings;
   put($("#lx", root), 
@@ -408,7 +408,7 @@ async function viewLeague(root, ctx, params, id) {
       h("div", {}, h("h1", {}, l.name), h("div", { class: "meta" }, h("span", {}, l.country === "World" ? "International" : l.country), h("span", {}, l.type === "Cup" ? "Coupe" : "Championnat"))),
       starButton("leagues", { id: l.id, name: l.name, logo: l.logo, country: l.country })),
       seasons.length > 1 ? h("div", { class: "bar", style: "margin:14px 0 0" }, h("label", { for: "season" }, "Saison "),
-        h("select", { id: "season", class: "field", onchange: e => { location.hash = `#/competition/${id}?saison=${e.target.value}`; } },
+        h("select", { id: "season", class: "field", onchange: e => { navigate(`/competition/${id}?saison=${e.target.value}`); } },
           seasons.map(s => { const o = h("option", { value: s }, `${s}/${String(s + 1).slice(2)}`); if (String(s) === String(d.season)) o.selected = true; return o; }))) : null),
     h("div", { class: "grid-2" },
       h("div", {}, h("h2", {}, "Classement"),
@@ -423,7 +423,7 @@ async function viewLeague(root, ctx, params, id) {
 async function viewCompetitions(root, ctx, params) {
   const country = params.get("pays");
   root.append(h("h1", {}, country ? `Compétitions : ${country === "World" ? "International" : country}` : "Compétitions"),
-    h("p", { class: "sub" }, country ? h("a", { href: "#/competitions" }, "← Tous les pays") : "Les compétitions phares, puis tous les championnats par pays, y compris féminins."),
+    h("p", { class: "sub" }, country ? h("a", { href: "/competitions" }, "← Tous les pays") : "Les compétitions phares, puis tous les championnats par pays, y compris féminins."),
     h("div", { id: "cx" }, skeleton(4)));
   let body;
   try { body = await api("leagues", { ttl: 3600000 }); } catch (e) { if (ctx.alive()) put($("#cx", root), stateBox(e)); return; }
@@ -443,7 +443,7 @@ async function viewCompetitions(root, ctx, params) {
   let text = "";
   const grid = h("div", { class: "countries" });
   const drawCountries = () => put(grid, ...[...counts.keys()].filter(c => c.toLowerCase().includes(text)).sort((a, b) => (a === "World" ? -1 : b === "World" ? 1 : a.localeCompare(b, "fr")))
-    .map(c => h("a", { class: "country", href: `#/competitions?pays=${encodeURIComponent(c)}` }, flags.get(c) ? img(flags.get(c)) : h("span", {}, "🌐"), c === "World" ? "International" : c, h("small", {}, counts.get(c)))));
+    .map(c => h("a", { class: "country", href: `/competitions?pays=${encodeURIComponent(c)}` }, flags.get(c) ? img(flags.get(c)) : h("span", {}, "🌐"), c === "World" ? "International" : c, h("small", {}, counts.get(c)))));
   drawCountries();
   put($("#cx", root), 
     ...REGIONS.map(([name, ids]) => { const ls = ids.map(i => byId.get(i)).filter(Boolean); return ls.length ? [h("h2", {}, name), h("div", { class: "comps" }, ls.map(compTile))] : null; }),
@@ -462,10 +462,10 @@ async function viewSearch(root, ctx, params) {
   const section = (title, list, render, missing) => [h("h2", {}, title, list ? h("small", { class: "updated" }, String(list.length)) : null),
     list == null ? empty("Indisponible", missing) : list.length ? render(list) : h("p", { class: "updated" }, "Aucun résultat.")];
   put($("#sx", root), 
-    ...section("Clubs et sélections", d.teams, l => h("div", { class: "comps" }, l.slice(0, 30).map(t => h("a", { class: "comp", href: `#/equipe/${t.id}` }, img(t.logo), h("span", {}, t.name, h("small", {}, t.national ? `Sélection · ${t.country}` : t.country))))), "La recherche d’équipes n’a pas répondu."),
+    ...section("Clubs et sélections", d.teams, l => h("div", { class: "comps" }, l.slice(0, 30).map(t => h("a", { class: "comp", href: `/equipe/${t.id}` }, img(t.logo), h("span", {}, t.name, h("small", {}, t.national ? `Sélection · ${t.country}` : t.country))))), "La recherche d’équipes n’a pas répondu."),
     ...section("Compétitions", d.leagues, l => h("div", { class: "comps" }, l.slice(0, 20).map(compTile)), "La recherche de compétitions n’a pas répondu."),
-    ...section("Joueurs", d.players, l => h("div", { class: "squad" }, l.slice(0, 30).map(p => h("a", { class: "player", href: `#/joueur/${p.id}` }, img(p.photo), h("div", {}, h("b", {}, p.name), h("small", {}, [p.position, p.nationality, p.age ? `${p.age} ans` : null].filter(Boolean).join(" · ")))))), "La recherche de joueurs n’est pas disponible avec l’abonnement actuel."),
-    ...section("Entraîneurs", d.coaches, l => h("div", { class: "squad" }, l.slice(0, 20).map(c => h(c.team ? "a" : "div", { class: "player", href: c.team ? `#/equipe/${c.team.id}` : null, style: "text-decoration:none" }, img(c.photo), h("div", {}, h("b", {}, c.name), h("small", {}, [c.team?.name, c.nationality].filter(Boolean).join(" · ")))))), "La recherche d’entraîneurs n’a pas répondu."),
+    ...section("Joueurs", d.players, l => h("div", { class: "squad" }, l.slice(0, 30).map(p => h("a", { class: "player", href: `/joueur/${p.id}` }, img(p.photo), h("div", {}, h("b", {}, p.name), h("small", {}, [p.position, p.nationality, p.age ? `${p.age} ans` : null].filter(Boolean).join(" · ")))))), "La recherche de joueurs n’est pas disponible avec l’abonnement actuel."),
+    ...section("Entraîneurs", d.coaches, l => h("div", { class: "squad" }, l.slice(0, 20).map(c => h(c.team ? "a" : "div", { class: "player", href: c.team ? `/equipe/${c.team.id}` : null, style: "text-decoration:none" }, img(c.photo), h("div", {}, h("b", {}, c.name), h("small", {}, [c.team?.name, c.nationality].filter(Boolean).join(" · ")))))), "La recherche d’entraîneurs n’a pas répondu."),
     h("p", { class: "updated", style: "margin-top:16px" }, "Touchez un joueur pour voir sa fiche détaillée, sa note TOTAL90 et le comparer."));
 }
 
@@ -474,7 +474,7 @@ async function viewFavorites(root, ctx) {
   root.append(h("h1", {}, "Mes favoris"), h("p", { class: "sub" }, "Vos favoris sont enregistrés sur cet appareil."));
   if (!fav.teams.length && !fav.leagues.length) { root.append(empty("Aucun favori pour l’instant", "Ouvrez la page d’une équipe ou d’une compétition et touchez « Suivre ».")); return; }
   root.append(
-    h("h2", {}, "Équipes suivies"), fav.teams.length ? h("div", { class: "comps" }, fav.teams.map(t => h("a", { class: "comp", href: `#/equipe/${t.id}` }, img(t.logo), t.name))) : h("p", { class: "updated" }, "Aucune équipe."),
+    h("h2", {}, "Équipes suivies"), fav.teams.length ? h("div", { class: "comps" }, fav.teams.map(t => h("a", { class: "comp", href: `/equipe/${t.id}` }, img(t.logo), t.name))) : h("p", { class: "updated" }, "Aucune équipe."),
     h("h2", {}, "Compétitions suivies"), fav.leagues.length ? h("div", { class: "comps" }, fav.leagues.map(compTile)) : h("p", { class: "updated" }, "Aucune compétition."),
     h("h2", {}, "Leurs matchs aujourd’hui"), h("div", { id: "fv" }, skeleton(2)));
   try {
@@ -607,7 +607,7 @@ async function viewPlayer(root, ctx, params, id) {
   catch (e) { if (ctx.alive()) put($("#px", root), stateBox(e)); return; }
   if (!ctx.alive()) return;
   const P = a.data, seasons = P.seasons;
-  document.title = `${P.player.name} · TOTAL90`;
+  setMeta(P.player.name, `${P.player.name} : statistiques, note TOTAL90, évolution et comparaison.`);
   let sel = params.get("saison") && seasons.find(x => String(x.season) === params.get("saison")) ? params.get("saison") : String(seasons[0]?.season);
   const box = $("#px", root);
   const draw = () => {
@@ -619,7 +619,7 @@ async function viewPlayer(root, ctx, params, id) {
       h("div", {}, h("h1", {}, pl.name), h("div", { class: "meta" },
         t?.position ? h("span", {}, POS_FR[t.position] || t.position) : null, pl.nationality ? h("span", {}, pl.nationality) : null,
         pl.age ? h("span", {}, `${pl.age} ans`) : null, pl.height ? h("span", {}, pl.height) : null, pl.weight ? h("span", {}, pl.weight) : null,
-        mainComp?.team ? h("a", { href: `#/equipe/${mainComp.team.id}` }, mainComp.team.name) : null)),
+        mainComp?.team ? h("a", { href: `/equipe/${mainComp.team.id}` }, mainComp.team.name) : null)),
       h("div", { class: "note-box" }, noteBadge(r, true), h("small", {}, `Note TOTAL90 · ${seasonLabel(sel)}`))),
       h("div", { class: "bar", style: "margin:14px 0 0" }, seasons.map(x => h("button", { type: "button", class: "chip", "aria-pressed": String(String(x.season) === sel), onclick: () => { sel = String(x.season); draw(); } }, seasonLabel(x.season)))),
       P.seasonsBlocked ? h("p", { class: "updated" }, `${P.seasonsBlocked} saison(s) récente(s) non incluse(s) dans l’abonnement actuel.`) : null);
@@ -636,7 +636,7 @@ async function viewPlayer(root, ctx, params, id) {
       t.minutes ? kpi(fr(((t.goals + t.assists) / t.minutes) * 90, 2), "Buts + passes déc. par 90 min") : null);
     const comps = h("div", { class: "panel table-wrap" }, h("table", { class: "standings" },
       h("thead", {}, h("tr", {}, ["", "Compétition", "MJ", "Min", "Buts", "PD", "Note"].map(x => h("th", {}, x)))),
-      h("tbody", {}, cur.competitions.map(c => h("tr", {}, h("td", {}, img(c.league?.logo)), h("td", {}, h("a", { href: c.league ? `#/competition/${c.league.id}` : "#/" }, c.league?.name || "–"), h("small", { class: "updated" }, c.team ? " · " + c.team.name : "")),
+      h("tbody", {}, cur.competitions.map(c => h("tr", {}, h("td", {}, img(c.league?.logo)), h("td", {}, h("a", { href: c.league ? `/competition/${c.league.id}` : "/" }, c.league?.name || "–"), h("small", { class: "updated" }, c.team ? " · " + c.team.name : "")),
         h("td", {}, c.apps), h("td", {}, fr(c.minutes)), h("td", {}, c.goals), h("td", {}, c.assists), h("td", {}, noteBadge(t90Rating({ ...c, position: t.position }))))))));
     // évolution
     const asc = seasons.slice().sort((x, y) => x.season - y.season);
@@ -659,7 +659,7 @@ async function viewPlayer(root, ctx, params, id) {
         h("div", {}, h("h2", {}, "Évolution"), h("div", { class: "panel" }, metricBar, chartBox, h("p", { class: "updated" }, "Survolez ou touchez une barre pour voir la valeur exacte.")),
           h("h2", {}, "Par compétition"), comps),
         h("aside", {}, h("h2", {}, "Détail de la note"), breakdown, ratingDoc(),
-          h("h2", {}, "Comparer avec un autre joueur"), h("div", { class: "panel" }, playerPicker(p => { location.hash = `#/joueur/${id}?vs=${p.id}`; })))),
+          h("h2", {}, "Comparer avec un autre joueur"), h("div", { class: "panel" }, playerPicker(p => { navigate(`/joueur/${id}?vs=${p.id}`); })))),
       b ? compareBlock(P, b.data, sel) : null,
       updatedLine(a));
     if (b) setTimeout(() => $("#compare", root)?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -683,7 +683,7 @@ function compareBlock(A, B, selA) {
   const c = (v, hi) => Math.max(0, Math.min(1, (v || 0) / hi));
   const prof = t => [c(p90(t, t.goals), .8), c(p90(t, t.assists), .4), c(p90(t, t.shotsOn), 2), c(p90(t, t.keyPasses), 3), c(p90(t, t.dribblesWon), 2), c(p90(t, t.tackles + t.interceptions), 4), c(t.duels ? (t.duelsWon / t.duels) * 100 : 0, 70)];
   return h("section", { id: "compare" }, h("h2", {}, `Comparaison : ${A.player.name} et ${B.player.name}`),
-    h("p", { class: "updated" }, `${A.player.name} : saison ${seasonLabel(selA)} · ${B.player.name} : saison ${seasonLabel(sb.season)}. `, h("a", { href: `#/joueur/${B.player.id}` }, `Voir la fiche de ${B.player.name}`)),
+    h("p", { class: "updated" }, `${A.player.name} : saison ${seasonLabel(selA)} · ${B.player.name} : saison ${seasonLabel(sb.season)}. `, h("a", { href: `/joueur/${B.player.id}` }, `Voir la fiche de ${B.player.name}`)),
     h("div", { class: "grid-2" },
       h("div", { class: "panel table-wrap" }, h("table", { class: "standings cmp" },
         h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, A.player.name), h("th", {}, B.player.name))),
@@ -703,7 +703,7 @@ async function topPerformers(box, leagueId, limit, ctx) {
     const body = await api(`topscorers?league=${leagueId}&season=${lg.season}`, { ttl: 600000 });
     if (ctx && !ctx.alive()) return;
     const rows = body.data.map(x => ({ ...x, r: t90Rating(x.total) })).filter(x => x.r).sort((a, b) => b.r.note - a.r.note).slice(0, limit);
-    put(box, rows.length ? h("div", { class: "group" }, rows.map((x, i) => h("a", { class: "row perf", href: `#/joueur/${x.player.id}` },
+    put(box, rows.length ? h("div", { class: "group" }, rows.map((x, i) => h("a", { class: "row perf", href: `/joueur/${x.player.id}` },
       h("span", { class: "when" }, i + 1), h("span", { class: "tm" }, img(x.player.photo, "round"), h("span", {}, h("b", {}, x.player.name), h("small", { class: "updated" }, ` · ${x.team?.name || ""} · ${x.total.goals} buts, ${x.total.assists} passes déc.`))), noteBadge(x.r))))
       : empty("Pas encore de données", "Les statistiques de la saison ne sont pas disponibles."),
       h("p", { class: "updated" }, `Parmi les meilleurs buteurs de ${lg.name} ${seasonLabel(lg.season)}, classés par note TOTAL90.`));
@@ -714,12 +714,12 @@ async function topPerformers(box, leagueId, limit, ctx) {
 async function viewAnalyses(root, ctx, params) {
   const leagueId = Number(params.get("ligue")) || 61;
   const choices = [61, 39, 140, 78, 135, 2, 88, 94, 307, 71, 253, 200];
-  const sel = h("select", { class: "field", "aria-label": "Compétition", onchange: e => { location.hash = `#/analyses?ligue=${e.target.value}`; } });
+  const sel = h("select", { class: "field", "aria-label": "Compétition", onchange: e => { navigate(`/analyses?ligue=${e.target.value}`); } });
   const top = h("div", {});
   root.append(h("h1", {}, "Analyses"), h("p", { class: "sub" }, "Statistiques détaillées des joueurs, note TOTAL90, comparaisons et analyses des équipes, à partir de données réelles."),
     h("div", { class: "grid-2" },
       h("div", {}, h("h2", {}, "Match Analysis : probabilités des grands matchs"), h("div", { id: "ma-list" }), h("h2", {}, "Meilleures performances"), h("div", { class: "bar" }, sel), top),
-      h("aside", {}, h("h2", {}, "Analyser un joueur"), h("div", { class: "panel" }, playerPicker(p => { location.hash = `#/joueur/${p.id}`; })),
+      h("aside", {}, h("h2", {}, "Analyser un joueur"), h("div", { class: "panel" }, playerPicker(p => { navigate(`/joueur/${p.id}`); })),
         h("h2", {}, "Analyser une équipe"), h("div", { class: "panel" }, "Recherchez un club ou une sélection avec la barre en haut de page : sa fiche affiche forme, bilan domicile et extérieur, buts par période de jeu et comparaison avec les autres équipes du championnat."),
         h("h2", {}, "Comparer deux joueurs"), h("div", { class: "panel" }, "Ouvrez la fiche d’un joueur, puis utilisez « Comparer avec un autre joueur »."),
         ratingDoc())));
@@ -804,7 +804,7 @@ async function viewNews(root, ctx, params) {
   const srcBox = h("div", {});
   root.append(h("h1", {}, "Actualités"), h("p", { class: "sub" }, "Les dernières informations sportives, récupérées automatiquement auprès de médias reconnus. Chaque article renvoie vers sa source."),
     chips, h("div", { class: "bar" }, h("input", { class: "field wide", type: "search", placeholder: "Filtrer : club, joueur, compétition…", "aria-label": "Filtrer les actualités", oninput: e => { text = e.target.value.toLowerCase().trim(); draw(); } })),
-    list, h("h2", {}, "Sources"), srcBox);
+    list, adSlot("actualites"), h("h2", {}, "Sources"), srcBox);
   let data = null, body = null;
   const draw = () => {
     put(chips, NEWS_CATS.map(([k, l]) => h("button", { type: "button", class: "chip", "aria-pressed": String(cat === k), onclick: () => { cat = k; draw(); } }, l)));
@@ -967,8 +967,8 @@ async function matchAnalysisList(box, ctx) {
 const espnNote = () => h("p", { class: "updated" }, "Source : données publiques d’ESPN (gratuites, sans quota). Elles ne sont pas officiellement documentées : si ESPN les modifie, la section concernée s’affichera comme indisponible le temps de l’adapter.");
 function dateBar(date, base) {
   return h("div", { class: "bar" },
-    ["Hier", "Aujourd’hui", "Demain"].map((l, i) => { const d = addDays(TODAY(), i - 1); return h("a", { class: "chip" + (d === date ? " on" : ""), href: `#/${base}?date=${d}` }, l); }),
-    h("input", { class: "field", type: "date", value: date, "aria-label": "Choisir une date", onchange: e => e.target.value && (location.hash = `#/${base}?date=${e.target.value}`) }));
+    ["Hier", "Aujourd’hui", "Demain"].map((l, i) => { const d = addDays(TODAY(), i - 1); return h("a", { class: "chip" + (d === date ? " on" : ""), href: `/${base}?date=${d}` }, l); }),
+    h("input", { class: "field", type: "date", value: date, "aria-label": "Choisir une date", onchange: e => e.target.value && (navigate(`/${base}?date=${e.target.value}`)) }));
 }
 const sportClock = g => g.state === "scheduled" ? hm(g.date) : g.state === "live" ? (trFR(g.detail) || "En cours") : g.state === "finished" ? "Terminé" : trFR(g.detail);
 
@@ -982,6 +982,23 @@ const TR_RULES = [
   [/Lightweight/i, "Poids légers"], [/Featherweight/i, "Poids plumes"], [/Bantamweight/i, "Poids coqs"], [/Flyweight/i, "Poids mouches"], [/Strawweight/i, "Poids pailles"], [/Catchweight/i, "Poids convenu"]
 ];
 const trFR = v => v ? TR_RULES.reduce((a, [re, to]) => a.replace(re, to), String(v)) : v;
+
+/* Données ESPN : d'abord via le serveur TOTAL90 (cache partagé), sinon directement depuis le navigateur. */
+let espnModule = null;
+async function espnGet(job, path, args, ttl) {
+  try { return await api(path, { ttl }); }
+  catch (e) {
+    if (e && e.name === "AbortError") throw e;
+    const key = "direct:" + path, hit = cache.get(key);
+    if (hit && hit.until > Date.now()) return hit.body;
+    espnModule = espnModule || await import("/assets/espn.mjs?v=6");
+    try {
+      const body = { data: await espnModule[job](...args), fetchedAt: new Date().toISOString() };
+      cache.set(key, { body, until: Date.now() + (ttl || 30000) });
+      return body;
+    } catch (e2) { throw { error: "upstream", message: (e2 && e2.message) || "Données momentanément indisponibles." }; }
+  }
+}
 
 /* ---------- Basketball ---------- */
 function nbaCard(g) {
@@ -1010,7 +1027,7 @@ async function viewBasketball(root, ctx, params) {
   const load = async () => {
     try {
       // La journée NBA américaine chevauche deux dates européennes : on prend la veille et le jour même, puis on filtre sur la date locale.
-      const [a, b] = await Promise.all([api(`espn/basketball?date=${addDays(date, -1)}`, { ttl: 30000 }), api(`espn/basketball?date=${date}`, { ttl: 30000 })]);
+      const [a, b] = await Promise.all([espnGet("basketball", `espn/basketball?date=${addDays(date, -1)}`, [addDays(date, -1)], 30000), espnGet("basketball", `espn/basketball?date=${date}`, [date], 30000)]);
       if (!ctx.alive()) return;
       const games = [...a.data, ...b.data].filter((g, i, all) => all.findIndex(x => x.id === g.id) === i && ymd(new Date(g.date)) === date).sort((x, y) => x.date.localeCompare(y.date));
       put(list, games.length ? h("div", { class: "games" }, games.map(nbaCard)) : empty("Aucun match NBA ce jour-là", "Essayez une autre date."), h("p", { class: "updated" }, "Touchez un match pour le score par quart-temps."), updatedLine(b));
@@ -1019,7 +1036,7 @@ async function viewBasketball(root, ctx, params) {
   await load();
   ctx.every(LIVE_REFRESH * 2, load);
   try {
-    const st = await api("espn/nba-standings", { ttl: 600000 });
+    const st = await espnGet("nbaStandings", "espn/nba-standings", [], 600000);
     if (!ctx.alive()) return;
     put(table, st.data.length ? st.data.map(c => [h("h3", { style: "margin:12px 0 6px" }, c.name), h("div", { class: "panel table-wrap" }, h("table", { class: "standings" },
       h("thead", {}, h("tr", {}, ["#", "Équipe", "V", "D", "%", "Écart"].map(x => h("th", {}, x)))),
@@ -1042,12 +1059,12 @@ async function viewTennis(root, ctx, params) {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") || "") ? params.get("date") : TODAY();
   const list = h("div", {}, skeleton(3)), rk = h("div", {}, skeleton(3));
   root.append(h("h1", {}, "Tennis"), h("p", { class: "sub" }, `${tour.toUpperCase()} · ${longDate(date)}`),
-    h("div", { class: "bar" }, ["atp", "wta"].map(t => h("a", { class: "chip" + (t === tour ? " on" : ""), href: `#/tennis?circuit=${t}&date=${date}` }, t === "atp" ? "ATP (messieurs)" : "WTA (dames)"))),
-    h("div", { class: "bar" }, ["Hier", "Aujourd’hui", "Demain"].map((l, i) => { const d = addDays(TODAY(), i - 1); return h("a", { class: "chip" + (d === date ? " on" : ""), href: `#/tennis?circuit=${tour}&date=${d}` }, l); })),
+    h("div", { class: "bar" }, ["atp", "wta"].map(t => h("a", { class: "chip" + (t === tour ? " on" : ""), href: `/tennis?circuit=${t}&date=${date}` }, t === "atp" ? "ATP (messieurs)" : "WTA (dames)"))),
+    h("div", { class: "bar" }, ["Hier", "Aujourd’hui", "Demain"].map((l, i) => { const d = addDays(TODAY(), i - 1); return h("a", { class: "chip" + (d === date ? " on" : ""), href: `/tennis?circuit=${tour}&date=${d}` }, l); })),
     h("div", { class: "grid-2" }, h("div", {}, h("h2", {}, "Matchs"), list), h("aside", {}, h("h2", {}, `Classement ${tour.toUpperCase()}`), rk)), espnNote());
   const load = async () => {
     try {
-      const b = await api(`espn/tennis?tour=${tour}&date=${date}`, { ttl: 30000 });
+      const b = await espnGet("tennis", `espn/tennis?tour=${tour}&date=${date}`, [tour, date], 30000);
       if (!ctx.alive()) return;
       put(list, b.data.length ? b.data.map(t => h("section", { class: "group" }, h("div", { class: "ghead" }, h("div", {}, h("b", {}, t.name), h("br"), h("small", {}, [t.venue, t.start ? `${dayLabel(t.start)}${t.end ? " – " + dayLabel(t.end) : ""}` : null].filter(Boolean).join(" · ")))),
         t.groups.map(g => [h("div", { class: "tn-group" }, trFR(g.name)), g.matches.map(tennisRow)]))) : empty("Aucun match ce jour-là sur ce circuit", "Hors saison ou jour de repos : essayez une autre date ou l’autre circuit."), updatedLine(b));
@@ -1056,7 +1073,7 @@ async function viewTennis(root, ctx, params) {
   await load();
   ctx.every(LIVE_REFRESH * 2, load);
   try {
-    const r = await api(`espn/tennis-rankings?tour=${tour}`, { ttl: 600000 });
+    const r = await espnGet("tennisRankings", `espn/tennis-rankings?tour=${tour}`, [tour], 600000);
     if (!ctx.alive()) return;
     put(rk, r.data.rows.length ? h("div", { class: "panel table-wrap" }, h("table", { class: "standings" },
       h("thead", {}, h("tr", {}, ["#", "Joueur", "Points", ""].map(x => h("th", {}, x)))),
@@ -1070,11 +1087,11 @@ async function viewOtherSports(root, ctx) {
   const f1Box = h("div", {}, skeleton(3)), ufcBox = h("div", {}, skeleton(3));
   root.append(h("h1", {}, "Autres sports"), h("p", { class: "sub" }, "Formule 1 et UFC en données réelles. Pour l’athlétisme, le rugby, le cyclisme et les autres disciplines, retrouvez les dernières informations dans les Actualités."),
     h("div", { class: "grid-2" }, h("div", {}, h("h2", {}, "Formule 1"), f1Box), h("aside", {}, h("h2", {}, "UFC"), ufcBox)),
-    h("div", { class: "bar", style: "margin-top:18px" }, h("a", { class: "chip", href: "#/actualites?cat=f1" }, "Actualités F1"), h("a", { class: "chip", href: "#/actualites?cat=combat" }, "Sports de combat"), h("a", { class: "chip", href: "#/actualites?cat=athletisme" }, "Athlétisme"), h("a", { class: "chip", href: "#/actualites?cat=autres" }, "Autres sports")),
+    h("div", { class: "bar", style: "margin-top:18px" }, h("a", { class: "chip", href: "/actualites?cat=f1" }, "Actualités F1"), h("a", { class: "chip", href: "/actualites?cat=combat" }, "Sports de combat"), h("a", { class: "chip", href: "/actualites?cat=athletisme" }, "Athlétisme"), h("a", { class: "chip", href: "/actualites?cat=autres" }, "Autres sports")),
     espnNote());
   const upcomingCal = cal => cal.filter(c => new Date(c.end || c.start) >= new Date(Date.now() - 864e5)).slice(0, 6);
   try {
-    const { data } = await api("espn/f1", { ttl: 60000 });
+    const { data } = await espnGet("f1", "espn/f1", [], 60000);
     if (!ctx.alive()) return;
     const ev = data.events[0];
     put(f1Box,
@@ -1085,7 +1102,7 @@ async function viewOtherSports(root, ctx) {
       upcomingCal(data.calendar).length ? [h("h3", { style: "margin:16px 0 8px" }, "Prochains rendez-vous"), h("div", { class: "group" }, upcomingCal(data.calendar).map(c => h("div", { class: "row cal" }, h("span", { class: "when" }, dayLabel(c.start)), h("span", {}, c.name), h("span", {}))))] : null);
   } catch (e) { put(f1Box, stateBox(e)); }
   try {
-    const { data } = await api("espn/mma", { ttl: 60000 });
+    const { data } = await espnGet("mma", "espn/mma", [], 60000);
     if (!ctx.alive()) return;
     const ev = data.events[0];
     put(ufcBox,
@@ -1098,17 +1115,132 @@ async function viewOtherSports(root, ctx) {
   } catch (e) { put(ufcBox, stateBox(e)); }
 }
 
+/* ================= ÉTAPE 6 : PAGES LÉGALES, CONSENTEMENT, PUBLICITÉ ================= */
+const CFG = () => window.T90_CONFIG || {};
+const todo = v => v ? v : h("mark", { class: "todo" }, "[à compléter dans assets/config.js]");
+function legalPage(root, title, ...sections) { root.append(h("article", { class: "legal" }, h("h1", {}, title), ...sections, h("p", { class: "updated" }, "Dernière mise à jour : 19 novembre 2026. Ce texte est un modèle à vérifier ; il ne remplace pas l’avis d’un juriste."))); }
+const sec = (t, ...k) => h("section", {}, h("h2", {}, t), ...k);
+
+function viewLegal(root) {
+  const e = CFG().editor || {}, host = CFG().host || {};
+  legalPage(root, "Mentions légales",
+    sec("Éditeur du site",
+      h("p", {}, "Le site ", h("b", {}, CFG().siteName || "TOTAL90"), " (", CFG().siteUrl || location.origin, ") est édité par : ", todo(e.status === "entreprise" ? e.company : e.name), "."),
+      e.status === "entreprise" ? h("p", {}, "Adresse du siège : ", todo(e.address), ".") : h("p", {}, e.address ? `Adresse : ${e.address}.` : "Éditeur non professionnel : conformément à l’article 6, III, 2 de la loi n° 2004-575 du 21 juin 2004, ses coordonnées complètes ont été communiquées à l’hébergeur."),
+      h("p", {}, "Contact : ", e.email ? h("a", { href: `mailto:${e.email}` }, e.email) : todo(""), "."),
+      h("p", {}, "Directeur de la publication : ", todo(e.publicationDirector || e.name), ".")),
+    sec("Hébergeur", h("p", {}, host.name || "Netlify, Inc.", ", ", host.address || "", " – ", h("a", { href: host.website || "https://www.netlify.com", target: "_blank", rel: "noopener" }, host.website || "www.netlify.com"), ".")),
+    sec("Données affichées",
+      h("p", {}, "Les résultats, statistiques et classements proviennent de fournisseurs tiers (API-Football, ESPN). Les actualités sont des titres et résumés issus des flux RSS publics des médias cités, avec un lien vers l’article original ; leurs contenus restent la propriété de leurs auteurs. Les logos des clubs et compétitions appartiennent à leurs détenteurs respectifs."),
+      h("p", {}, "Les notes TOTAL90 et les probabilités de victoire sont des estimations statistiques fournies à titre informatif. Elles ne constituent ni une garantie ni un conseil de pari.")),
+    sec("Propriété intellectuelle", h("p", {}, "La marque, le logo et la mise en page de TOTAL90 sont la propriété de l’éditeur. La police Archivo est distribuée sous licence SIL Open Font License 1.1.")));
+}
+function viewPrivacy(root) {
+  const e = CFG().editor || {};
+  legalPage(root, "Politique de confidentialité",
+    sec("En résumé", h("p", {}, "TOTAL90 ne demande aucun compte, ne collecte ni nom ni e-mail, n’utilise aucun cookie publicitaire et aucune mesure d’audience. Vos équipes favorites restent sur votre appareil.")),
+    sec("Données enregistrées sur votre appareil", h("p", {}, "Vos favoris (équipes et compétitions suivies) et, le cas échéant, votre choix concernant les cookies sont enregistrés dans le stockage local de votre navigateur. Ils ne sont jamais envoyés à TOTAL90. Vous pouvez les effacer à tout moment en vidant les données du site dans votre navigateur.")),
+    sec("Données techniques", h("p", {}, "Comme tout site web, l’hébergeur (Netlify) traite techniquement votre adresse IP et les informations de connexion pour afficher les pages et assurer la sécurité. Base légale : intérêt légitime au bon fonctionnement du site.")),
+    sec("Contenus de sites tiers", h("p", {}, "Pour afficher les logos, les photos des joueurs, les images des actualités et certaines données sportives (basket, tennis, F1, UFC), votre navigateur se connecte directement aux serveurs de ces fournisseurs (API-Sports, ESPN, médias cités). Ils reçoivent alors votre adresse IP, comme lors de toute visite d’un site. Certains de ces serveurs peuvent être situés hors de l’Union européenne.")),
+    sec("Vos droits", h("p", {}, "Vous disposez d’un droit d’accès, de rectification, d’effacement et d’opposition. TOTAL90 ne détenant aucune donnée personnelle vous concernant en dehors des données techniques de l’hébergeur, vous pouvez nous écrire à ", e.email ? h("a", { href: `mailto:${e.email}` }, e.email) : todo(""), ". Vous pouvez aussi saisir la CNIL (www.cnil.fr).")));
+}
+function viewCookies(root) {
+  const ads = CFG().ads?.enabled, ana = CFG().analytics?.enabled;
+  legalPage(root, "Cookies et traceurs",
+    sec("Ce que TOTAL90 utilise aujourd’hui", h("p", {}, "Aucun cookie. Le site enregistre seulement vos favoris dans le stockage local de votre navigateur, à votre demande : ce stockage est strictement nécessaire au service que vous utilisez et ne demande donc pas de consentement.")),
+    ads || ana ? sec("Publicité et mesure d’audience", h("p", {}, "Des cookies de publicité ou de mesure d’audience peuvent être déposés uniquement si vous les acceptez. Vous pouvez modifier votre choix à tout moment."),
+      h("button", { type: "button", class: "chip on", onclick: () => Consent.open(true) }, "Modifier mes choix")) :
+      sec("Publicité et mesure d’audience", h("p", {}, "Désactivées. Si elles sont activées un jour, une fenêtre vous demandera votre accord avant tout dépôt de cookie, avec un choix « Tout refuser » aussi simple que « Tout accepter ».")));
+}
+function viewAbout(root) {
+  legalPage(root, "À propos des données",
+    sec("Football", h("p", {}, "Matchs, scores, événements, compositions, classements, statistiques d’équipes et de joueurs : API-Football (API-Sports). Avec l’offre gratuite, les scores sont relevés environ toutes les 30 minutes.")),
+    sec("Basketball, tennis, Formule 1, UFC", h("p", {}, "Points d’accès publics d’ESPN, gratuits mais non officiels : ils peuvent changer sans préavis, auquel cas la section concernée s’affiche comme indisponible.")),
+    sec("Actualités", h("p", {}, "Flux RSS publics de Maxifoot, L’Équipe, Franceinfo, Le Monde et BBC Sport. Seuls le titre, un court résumé et l’image d’illustration sont repris, avec un lien vers l’article complet sur le site du média.")),
+    sec("Calculs TOTAL90", h("p", {}, "La note des joueurs et les probabilités de victoire sont calculées par TOTAL90 à partir de ces données, selon des méthodes expliquées sur les pages concernées. Aucune donnée n’est inventée : quand une information manque, le site l’indique.")));
+}
+
+/* ---------- Consentement (actif seulement si publicité ou mesure d’audience sont activées) ---------- */
+const Consent = {
+  key: "t90.consent",
+  read() { try { return JSON.parse(localStorage.getItem(this.key)); } catch { return null; } },
+  save(v) { try { localStorage.setItem(this.key, JSON.stringify({ ...v, date: new Date().toISOString() })); } catch {} document.getElementById("consent")?.remove(); applyConsent(); },
+  // Avec AdSense en Europe, Google impose sa propre fenêtre de consentement certifiée (cmp: "google") : la nôtre ne s’affiche alors que pour la mesure d’audience.
+  needed() { const a = CFG().ads; return !!((a?.enabled && a.cmp !== "google") || CFG().analytics?.enabled); },
+  open(force) {
+    if (!this.needed() || (!force && this.read())) return;
+    document.getElementById("consent")?.remove();
+    const cur = this.read() || {};
+    const adsBox = h("input", { type: "checkbox", id: "c-ads" }); adsBox.checked = !!cur.ads;
+    const anaBox = h("input", { type: "checkbox", id: "c-ana" }); anaBox.checked = !!cur.analytics;
+    const details = h("div", { class: "consent-details", hidden: true },
+      CFG().ads?.enabled ? h("label", {}, adsBox, " Publicité personnalisée") : null,
+      CFG().analytics?.enabled ? h("label", {}, anaBox, " Mesure d’audience") : null,
+      h("button", { type: "button", class: "chip", onclick: () => this.save({ ads: adsBox.checked, analytics: anaBox.checked }) }, "Enregistrer mes choix"));
+    document.body.append(h("div", { id: "consent", role: "dialog", "aria-label": "Vos choix concernant les cookies" },
+      h("p", {}, "TOTAL90 est gratuit grâce à la publicité. Avec votre accord, nos partenaires peuvent déposer des cookies pour afficher des publicités et mesurer l’audience. ", h("a", { href: "/cookies" }, "En savoir plus")),
+      h("div", { class: "consent-btns" },
+        h("button", { type: "button", class: "chip", onclick: () => this.save({ ads: false, analytics: false }) }, "Tout refuser"),
+        h("button", { type: "button", class: "chip", onclick: () => { details.hidden = !details.hidden; } }, "Personnaliser"),
+        h("button", { type: "button", class: "chip", onclick: () => this.save({ ads: true, analytics: true }) }, "Tout accepter")),
+      details));
+  }
+};
+function applyConsent() {
+  const c = Consent.read(), a = CFG().ads;
+  if (!a?.enabled || !a.client || document.getElementById("adsense-js")) return;
+  // Annonces non personnalisées si l’utilisateur a refusé (ou pas encore choisi)
+  window.adsbygoogle = window.adsbygoogle || [];
+  if (a.cmp !== "google" && !c?.ads) window.adsbygoogle.requestNonPersonalizedAds = 1;
+  const sc = document.createElement("script");
+  sc.id = "adsense-js"; sc.async = true; sc.crossOrigin = "anonymous";
+  sc.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(a.client)}`;
+  document.head.append(sc);
+}
+/* Emplacement publicitaire : n’affiche rien tant que la publicité est désactivée. */
+function adSlot(name) {
+  const a = CFG().ads;
+  if (!a?.enabled || !a.client) return null;
+  const ins = h("ins", { class: "adsbygoogle", style: "display:block", "data-ad-client": a.client, "data-ad-format": "auto", "data-full-width-responsive": "true" });
+  setTimeout(() => { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch {} }, 0);
+  return h("aside", { class: "ad", "aria-label": "Publicité" }, h("small", {}, "Publicité"), ins);
+}
+
 /* ---------- routeur ---------- */
 const ROUTES = [
-  [/^\/$/, viewHome], [/^\/live$/, viewLive], [/^\/football$/, viewFootball], [/^\/match\/(\d+)$/, viewMatch],
-  [/^\/equipe\/(\d+)$/, viewTeam], [/^\/competition\/(\d+)$/, viewLeague], [/^\/competitions$/, viewCompetitions],
-  [/^\/recherche$/, viewSearch], [/^\/favoris$/, viewFavorites], [/^\/joueur\/(\d+)$/, viewPlayer], [/^\/analyses$/, viewAnalyses], [/^\/actualites$/, viewNews], [/^\/basketball$/, viewBasketball], [/^\/tennis$/, viewTennis], [/^\/autres-sports$/, viewOtherSports]
+  [/^\/$/, viewHome, null, null],
+  [/^\/live$/, viewLive, "Matchs en direct", "Tous les matchs de football en cours dans le monde, scores mis à jour automatiquement."],
+  [/^\/football$/, viewFootball, "Football : matchs et résultats du jour", "Programme et résultats de football de toutes les compétitions du monde, jour par jour."],
+  [/^\/match\/(\d+)$/, viewMatch, "Fiche match", "Score, buteurs, statistiques, compositions, face-à-face et probabilités du match."],
+  [/^\/equipe\/(\d+)$/, viewTeam, "Fiche équipe", "Forme, résultats, calendrier, classement, effectif et statistiques avancées de l’équipe."],
+  [/^\/competition\/(\d+)$/, viewLeague, "Compétition", "Classement, résultats et prochains matchs de la compétition."],
+  [/^\/competitions$/, viewCompetitions, "Compétitions du monde entier", "Tous les championnats et compétitions de football par pays et par continent, y compris féminins."],
+  [/^\/recherche$/, viewSearch, "Recherche", null],
+  [/^\/favoris$/, viewFavorites, "Mes favoris", null],
+  [/^\/joueur\/(\d+)$/, viewPlayer, "Fiche joueur", "Statistiques détaillées, note TOTAL90 sur 10, évolution et comparaison du joueur."],
+  [/^\/analyses$/, viewAnalyses, "Analyses et Match Analysis", "Notes des joueurs, meilleures performances et probabilités de victoire des grands matchs."],
+  [/^\/actualites$/, viewNews, "Actualités sportives", "Les dernières actualités du football, du mercato, du basket, du tennis, de la F1 et des sports de combat."],
+  [/^\/basketball$/, viewBasketball, "Basketball : NBA en direct", "Matchs NBA du jour, scores par quart-temps et classements."],
+  [/^\/tennis$/, viewTennis, "Tennis : ATP et WTA", "Matchs ATP et WTA du jour, scores set par set et classements mondiaux."],
+  [/^\/autres-sports$/, viewOtherSports, "Formule 1 et UFC", "Grand Prix de Formule 1, résultats des séances, galas UFC et calendriers."],
+  [/^\/mentions-legales$/, viewLegal, "Mentions légales", null],
+  [/^\/confidentialite$/, viewPrivacy, "Politique de confidentialité", null],
+  [/^\/cookies$/, viewCookies, "Cookies et traceurs", null],
+  [/^\/a-propos$/, viewAbout, "À propos des données", null]
 ];
 let current = null;
+const META_DESC = "TOTAL90 : matchs en direct, résultats, classements, statistiques, analyses et probabilités de victoire, football et autres sports du monde entier.";
+function setMeta(title, desc) {
+  document.title = title ? `${title} · TOTAL90` : "TOTAL90 — The world of sports";
+  const m = document.querySelector('meta[name="description"]'); if (m) m.setAttribute("content", desc || META_DESC);
+  const c = document.querySelector('link[rel="canonical"]'); if (c) c.setAttribute("href", (window.T90_CONFIG?.siteUrl || location.origin) + location.pathname);
+}
+function navigate(to) { history.pushState(null, "", to); router(); }
 function router() {
-  const raw = location.hash.slice(1) || "/";
-  const [path, qs] = raw.split("?");
-  const params = new URLSearchParams(qs || "");
+  // anciennes adresses en « #/… » : on les convertit
+  if (location.hash.startsWith("#/")) history.replaceState(null, "", location.hash.slice(1));
+  const path = location.pathname.replace(/\/+$/, "") || "/";
+  const params = new URLSearchParams(location.search);
   if (current) current.stop();
   const timers = [];
   const token = {};
@@ -1116,16 +1248,28 @@ function router() {
   const ctx = { alive: () => current === token, every: (ms, fn) => timers.push(setInterval(() => { if (document.visibilityState === "visible" && ctx.alive()) fn(); }, ms)) };
   token.stop = () => timers.forEach(clearInterval);
   const main = $("#main");
-  put(main, );
-  document.title = "TOTAL90 — The world of sports";
+  main.replaceChildren();
   const navKey = "/" + (path.split("/")[1] || "");
   document.querySelectorAll("[data-nav]").forEach(a => a.dataset.nav === navKey ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
-  for (const [re, view] of ROUTES) {
+  for (const [re, view, title, desc] of ROUTES) {
     const m = path.match(re);
-    if (m) { Promise.resolve(view(main, ctx, params, m[1])).catch(e => { if (e?.name !== "AbortError") put(main, stateBox(e)); }); window.scrollTo(0, 0); return; }
+    if (m) {
+      setMeta(title, desc);
+      Promise.resolve(view(main, ctx, params, m[1])).catch(e => { if (e?.name !== "AbortError") main.replaceChildren(stateBox(e)); });
+      window.scrollTo(0, 0); return;
+    }
   }
-  viewNotFound(main);
+  setMeta("Page introuvable"); viewNotFound(main);
 }
+// Les liens internes changent de page sans recharger le site
+document.addEventListener("click", e => {
+  const a = e.target.closest("a[href]");
+  if (!a || a.target === "_blank" || a.hasAttribute("download") || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const url = new URL(a.getAttribute("href"), location.href);
+  if (url.origin !== location.origin || /^\/(api|assets)\//.test(url.pathname) || (url.hash && url.pathname === location.pathname && !url.hash.startsWith("#/"))) return;
+  e.preventDefault();
+  if (url.pathname + url.search !== location.pathname + location.search) navigate(url.pathname + url.search); else router();
+});
 
 /* ---------- recherche avec suggestions ---------- */
 function setupSearch() {
@@ -1134,7 +1278,7 @@ function setupSearch() {
   const close = () => { box.hidden = true; input.setAttribute("aria-expanded", "false"); sel = -1; };
   const open = () => { box.hidden = false; input.setAttribute("aria-expanded", "true"); };
   const mark = () => items.forEach((el, i) => el.setAttribute("aria-selected", String(i === sel)));
-  const full = () => { const q = input.value.trim(); if (q) { close(); location.hash = `#/recherche?q=${encodeURIComponent(q)}`; } };
+  const full = () => { const q = input.value.trim(); if (q) { close(); navigate(`/recherche?q=${encodeURIComponent(q)}`); } };
   input.addEventListener("input", () => {
     clearTimeout(timer);
     const q = input.value.trim();
@@ -1148,10 +1292,10 @@ function setupSearch() {
         const teams = (data.teams || []).slice(0, 6), leagues = (data.leagues || []).slice(0, 4);
         const link = (href, logo, name, extra) => h("a", { class: "sug", role: "option", href, onclick: close }, img(logo), h("span", {}, name), h("small", {}, extra || ""));
         put(box, 
-          ...(teams.length ? [h("h6", {}, "Clubs et sélections"), ...teams.map(t => link(`#/equipe/${t.id}`, t.logo, t.name, t.national ? "Sélection" : t.country))] : []),
-          ...(leagues.length ? [h("h6", {}, "Compétitions"), ...leagues.map(l => link(`#/competition/${l.id}`, l.logo, l.name, l.country === "World" ? "International" : l.country))] : []),
+          ...(teams.length ? [h("h6", {}, "Clubs et sélections"), ...teams.map(t => link(`/equipe/${t.id}`, t.logo, t.name, t.national ? "Sélection" : t.country))] : []),
+          ...(leagues.length ? [h("h6", {}, "Compétitions"), ...leagues.map(l => link(`/competition/${l.id}`, l.logo, l.name, l.country === "World" ? "International" : l.country))] : []),
           !teams.length && !leagues.length ? h("div", { class: "sug-msg" }, "Aucun club ni compétition trouvé.") : null,
-          h("a", { class: "sug-all", href: `#/recherche?q=${encodeURIComponent(q)}`, onclick: close }, "Voir tous les résultats (joueurs, entraîneurs…)"));
+          h("a", { class: "sug-all", href: `/recherche?q=${encodeURIComponent(q)}`, onclick: close }, "Voir tous les résultats (joueurs, entraîneurs…)"));
         items = [...box.querySelectorAll(".sug")]; sel = -1;
       } catch (e) { if (e.name !== "AbortError") { put(box, h("div", { class: "sug-msg" }, e.message || "Recherche indisponible.")); items = []; } }
     }, 350);
@@ -1159,13 +1303,15 @@ function setupSearch() {
   input.addEventListener("keydown", e => {
     if (e.key === "ArrowDown" && items.length) { e.preventDefault(); sel = (sel + 1) % items.length; mark(); }
     else if (e.key === "ArrowUp" && items.length) { e.preventDefault(); sel = (sel - 1 + items.length) % items.length; mark(); }
-    else if (e.key === "Enter") { e.preventDefault(); if (sel >= 0) { location.hash = items[sel].getAttribute("href"); close(); } else full(); }
+    else if (e.key === "Enter") { e.preventDefault(); if (sel >= 0) { navigate(items[sel].getAttribute("href")); close(); } else full(); }
     else if (e.key === "Escape") close();
   });
   document.addEventListener("click", e => { if (!e.target.closest(".search")) close(); });
   $("#tab-search").addEventListener("click", () => { window.scrollTo(0, 0); input.focus(); });
 }
 
-window.addEventListener("hashchange", router);
+window.addEventListener("popstate", router);
+Consent.open();
+applyConsent();
 setupSearch();
 router();
