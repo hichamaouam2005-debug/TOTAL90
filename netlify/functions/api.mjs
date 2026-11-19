@@ -14,7 +14,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 // Mode gratuit (par défaut) : l'offre gratuite d'API-Football autorise environ 100 requêtes par jour.
 // On garde donc chaque réponse beaucoup plus longtemps en cache. Mettre PLAN=paid pour le direct rapide.
 const FREE = () => env("PLAN") !== "paid";
-const FREE_MIN = { matches: 1800, live: 1800, match: 1800, search: 86400, leagues: 86400, league: 43200, team: 86400, player: 86400, players: 86400, topscorers: 43200, teamstats: 86400 };
+const FREE_MIN = { matches: 1800, live: 1800, match: 1800, search: 86400, leagues: 86400, league: 43200, team: 86400, player: 86400, players: 86400, topscorers: 43200, teamstats: 86400, standings: 43200 };
 const PAST_OR_FUTURE = 86400;
 
 // Chaque route : [fonction, durée de cache en secondes]
@@ -57,6 +57,10 @@ const ROUTES = {
   async topscorers(p, prov) {
     if (!isId(p.get("league")) || !/^\d{4}$/.test(p.get("season") || "")) throw new ProviderError("bad_request", "Paramètres invalides.");
     return [await prov.topScorers(p.get("league"), p.get("season")), 21600];
+  },
+  async standings(p, prov) {
+    if (!isId(p.get("league")) || !/^\d{4}$/.test(p.get("season") || "")) throw new ProviderError("bad_request", "Paramètres invalides.");
+    return [await prov.standings(p.get("league"), p.get("season")), 3600];
   },
   async teamstats(p, prov) {
     if (!isId(p.get("team")) || !isId(p.get("league")) || !/^\d{4}$/.test(p.get("season") || "")) throw new ProviderError("bad_request", "Paramètres invalides.");

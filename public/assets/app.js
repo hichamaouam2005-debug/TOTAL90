@@ -283,7 +283,7 @@ async function viewMatch(root, ctx, params, id) {
     const tabBar = h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, l]) => h("button", { class: "tab", role: "tab", type: "button", "aria-selected": String(tab === k), onclick: () => { tab = k; render(); } }, l)));
     const render = () => {
       tabBar.querySelectorAll(".tab").forEach((b, i) => b.setAttribute("aria-selected", String(tabs[i][0] === tab)));
-      put(content, ...({ resume: () => timeline(m), stats: () => statsBlock(m), compos: () => lineupsBlock(m), h2h: () => h2hBlock(m), proba: () => [soonPanel(4, "Probabilités de victoire, de match nul, des deux équipes qui marquent, de plus ou moins de 2,5 buts et score le plus probable, calculés par un modèle statistique documenté, avec date de calcul, niveau de confiance et facteurs. Ce seront des estimations, jamais des certitudes.")] }[tab])());
+      put(content, ...({ resume: () => timeline(m), stats: () => statsBlock(m), compos: () => lineupsBlock(m), h2h: () => h2hBlock(m), proba: () => { probaBlock(m).then(kids => { if (tab === "proba") put(content, kids); }); return skeleton(3); } }[tab])());
     };
     render();
     put($("#mx", root), head, tabBar, content, updatedLine(body));
@@ -548,7 +548,7 @@ function ratingDoc() {
 const SVG = "http://www.w3.org/2000/svg";
 function s(tag, attrs, ...kids) { const el = document.createElementNS(SVG, tag); for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v); kids.flat().forEach(k => k != null && el.append(k.nodeType ? k : document.createTextNode(String(k)))); return el; }
 function barChart({ labels, series, fmt = v => v, height = 220 }) {
-  const W = 640, H = height, L = 34, B = 30, T = 14, R = 8;
+  const W = 640, H = height, L = 50, B = 30, T = 18, R = 8;
   const max = Math.max(1, ...series.flatMap(x => x.values.map(v => v || 0)));
   const step = (W - L - R) / labels.length, bw = Math.min(46, (step * .72) / series.length);
   const y = v => T + (H - T - B) * (1 - v / max);
@@ -718,7 +718,7 @@ async function viewAnalyses(root, ctx, params) {
   const top = h("div", {});
   root.append(h("h1", {}, "Analyses"), h("p", { class: "sub" }, "Statistiques détaillées des joueurs, note TOTAL90, comparaisons et analyses des équipes, à partir de données réelles."),
     h("div", { class: "grid-2" },
-      h("div", {}, h("h2", {}, "Meilleures performances"), h("div", { class: "bar" }, sel), top),
+      h("div", {}, h("h2", {}, "Match Analysis : probabilités des grands matchs"), h("div", { id: "ma-list" }), h("h2", {}, "Meilleures performances"), h("div", { class: "bar" }, sel), top),
       h("aside", {}, h("h2", {}, "Analyser un joueur"), h("div", { class: "panel" }, playerPicker(p => { location.hash = `#/joueur/${p.id}`; })),
         h("h2", {}, "Analyser une équipe"), h("div", { class: "panel" }, "Recherchez un club ou une sélection avec la barre en haut de page : sa fiche affiche forme, bilan domicile et extérieur, buts par période de jeu et comparaison avec les autres équipes du championnat."),
         h("h2", {}, "Comparer deux joueurs"), h("div", { class: "panel" }, "Ouvrez la fiche d’un joueur, puis utilisez « Comparer avec un autre joueur »."),
@@ -728,6 +728,7 @@ async function viewAnalyses(root, ctx, params) {
     put(sel, choices.map(id => leagues.find(l => l.id === id)).filter(Boolean).map(l => { const o = h("option", { value: l.id }, `${l.name} (${place(l.country)})`); if (l.id === leagueId) o.selected = true; return o; }));
   } catch {}
   topPerformers(top, leagueId, 20, ctx);
+  matchAnalysisList($("#ma-list", root), ctx);
 }
 
 /* ---------- statistiques avancées d'équipe ---------- */
@@ -847,6 +848,118 @@ async function teamNews(box, teamName) {
     const items = d.items.filter(it => `${it.title} ${it.summary}`.toLowerCase().includes(n)).slice(0, 6);
     put(box, items.length ? h("div", { class: "news-list" }, items.map(it => h("a", { class: "news-line", href: it.link, target: "_blank", rel: "noopener noreferrer" },
       h("div", {}, h("b", {}, it.title), h("small", {}, `${it.source} · ${ago(it.date)}`))))) : empty("Pas d’actualité récente", `Aucun article récent de nos sources ne mentionne ${teamName}.`));
+  } catch (e) { put(box, stateBox(e)); }
+}
+
+/* ================= ÉTAPE 4 : MATCH ANALYSIS ================= */
+/* Modèle TOTAL90 (documenté sur le site) :
+   1. Moyennes de la compétition : buts marqués par match à domicile (μH) et à l’extérieur (μA), tirées du classement.
+   2. Forces de chaque équipe dans la compétition : attaque à domicile/extérieur et défense à domicile/extérieur,
+      rapportées à ces moyennes et « rétrécies » vers 1 quand l’échantillon est petit (K = 4 matchs fictifs moyens).
+   3. Forme : léger ajustement (±10 % max) selon les points pris sur les 5 derniers matchs comparés à la saison.
+   4. Buts attendus : λ dom = μH × attaque dom × défense ext adverse × forme ; λ ext = μA × attaque ext × défense dom adverse × forme.
+   5. Probabilités de chaque score par loi de Poisson, corrigées pour les petits scores (Dixon-Coles, ρ = −0,08). */
+const PRED_K = 4, PRED_RHO = -0.08, PRED_MAX = 8;
+const poisson = (k, l) => { let p = Math.exp(-l); for (let i = 1; i <= k; i++) p *= l / i; return p; };
+function formPoints(form, n) { const f = (form || "").slice(-n); return f.length ? [...f].reduce((a, c) => a + (c === "W" ? 3 : c === "D" ? 1 : 0), 0) / f.length : null; }
+function predictMatch(sh, sa, rows) {
+  const ok = x => x && x.played && x.played.total > 0;
+  if (!ok(sh) || !ok(sa)) return null;
+  const r = (rows || []).filter(x => x.hp > 0 && x.ap > 0);
+  const sum = k => r.reduce((a, x) => a + (x[k] || 0), 0);
+  let muH, muA, base;
+  if (sum("hp") >= 10 && sum("ap") >= 10) { muH = sum("hgf") / sum("hp"); muA = sum("agf") / sum("ap"); base = "classement de la compétition"; }
+  else {
+    const g = (sh.goalsFor.total + sh.goalsAgainst.total + sa.goalsFor.total + sa.goalsAgainst.total) / (2 * (sh.played.total + sa.played.total));
+    muH = g * 1.1; muA = g * 0.9; base = "matchs des deux équipes (avantage du terrain par défaut de 10 %)";
+  }
+  if (!(muH > 0) || !(muA > 0)) return null;
+  const shrink = (goals, n, mu) => n > 0 ? (goals / mu + PRED_K) / (n + PRED_K) : 1;
+  const attH = shrink(sh.goalsFor.home, sh.played.home, muH), defA = shrink(sa.goalsAgainst.away, sa.played.away, muH);
+  const attA = shrink(sa.goalsFor.away, sa.played.away, muA), defH = shrink(sh.goalsAgainst.home, sh.played.home, muA);
+  const formAdj = s => { const f = formPoints(s.form, 5), season = (3 * s.wins.total + s.draws.total) / s.played.total; return f == null ? 1 : 1 + 0.1 * Math.max(-1, Math.min(1, (f - season) / 1.5)); };
+  const fH = formAdj(sh), fA = formAdj(sa);
+  const clamp = v => Math.max(0.15, Math.min(5, v));
+  const lH = clamp(muH * attH * defA * fH), lA = clamp(muA * attA * defH * fA);
+  const tau = (i, j) => i === 0 && j === 0 ? 1 - lH * lA * PRED_RHO : i === 0 && j === 1 ? 1 + lH * PRED_RHO : i === 1 && j === 0 ? 1 + lA * PRED_RHO : i === 1 && j === 1 ? 1 - PRED_RHO : 1;
+  const grid = []; let tot = 0;
+  for (let i = 0; i <= PRED_MAX; i++) for (let j = 0; j <= PRED_MAX; j++) { const p = poisson(i, lH) * poisson(j, lA) * tau(i, j); grid.push([i, j, p]); tot += p; }
+  grid.forEach(c => c[2] /= tot);
+  const P = f => grid.filter(f).reduce((a, c) => a + c[2], 0);
+  const n = Math.min(sh.played.home, sa.played.away);
+  const confidence = n >= 6 && base.startsWith("classement") ? "Élevé" : n >= 3 ? "Moyen" : "Faible";
+  return {
+    home: P(([i, j]) => i > j), draw: P(([i, j]) => i === j), away: P(([i, j]) => i < j),
+    btts: P(([i, j]) => i > 0 && j > 0), over25: P(([i, j]) => i + j >= 3),
+    scores: grid.slice().sort((a, b) => b[2] - a[2]).slice(0, 6),
+    lH, lA, muH, muA, attH, attA, defH, defA, fH, fA, base, n, confidence
+  };
+}
+const pc = (v, d = 0) => fr(v * 100, d) + " %";
+async function probaBlock(m) {
+  if (m.status.state !== "scheduled") return [empty("Estimation avant-match uniquement", m.status.state === "finished" ? "Le match est terminé : les probabilités ne sont calculées que pour les rencontres à venir." : "Le match a commencé : les probabilités ne sont calculées qu’avant le coup d’envoi.")];
+  let sh, sa, st;
+  try {
+    [sh, sa, st] = await Promise.all([
+      api(`teamstats?team=${m.home.id}&league=${m.league.id}&season=${m.league.season}`, { ttl: 600000 }),
+      api(`teamstats?team=${m.away.id}&league=${m.league.id}&season=${m.league.season}`, { ttl: 600000 }),
+      api(`standings?league=${m.league.id}&season=${m.league.season}`, { ttl: 600000 }).catch(() => ({ data: [] }))
+    ]);
+  } catch (e) { return [stateBox(e)]; }
+  const rows = st.data.flat();
+  const p = predictMatch(sh.data, sa.data, rows);
+  if (!p) return [empty("Pas assez de données pour une estimation", "Les deux équipes doivent avoir joué au moins un match dans cette compétition. TOTAL90 préfère ne rien afficher plutôt qu’une estimation sans fondement.")];
+  const H = m.home.name, A = m.away.name, S = sh.data, T = sa.data;
+  const f5 = s => formPoints(s.form, 5);
+  const h2h = (m.h2h || []).filter(x => x.status.state === "finished");
+  let hw = 0, dw = 0, aw = 0; h2h.forEach(x => { const homeIsH = x.home.id === m.home.id; if (x.score.home === x.score.away) dw++; else if ((x.score.home > x.score.away) === homeIsH) hw++; else aw++; });
+  const factor = (title, text) => h("li", {}, h("b", {}, title), " ", text);
+  const winH = S.played.home ? S.wins.home / S.played.home : null, winA = T.played.away ? T.wins.away / T.played.away : null;
+  return [
+    h("div", { class: "proba-head" }, h("span", { class: "conf conf-" + p.confidence.normalize("NFD").replace(/[^a-z]/gi, "").toLowerCase() }, `Niveau de confiance : ${p.confidence}`),
+      h("span", { class: "updated" }, `Calculé le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}, d’après les données relevées le ${new Date(sh.fetchedAt).toLocaleDateString("fr-FR")}`)),
+    h("div", { class: "three" },
+      [[H, p.home, "var(--green)"], ["Match nul", p.draw, "var(--grey)"], [A, p.away, "#4D9DE0"]].map(([l, v, c]) => h("div", { class: "three-col" }, h("b", { style: `color:${c}` }, pc(v)), h("span", {}, l)))),
+    h("div", { class: "three-bar", role: "img", "aria-label": `${H} ${pc(p.home)}, nul ${pc(p.draw)}, ${A} ${pc(p.away)}` },
+      h("i", { style: `width:${p.home * 100}%;background:var(--green)` }), h("i", { style: `width:${p.draw * 100}%;background:var(--grey)` }), h("i", { style: `width:${p.away * 100}%;background:#4D9DE0` })),
+    h("div", { class: "kpis" },
+      h("div", { class: "kpi" }, h("b", {}, pc(p.btts)), h("span", {}, "Les deux équipes marquent")),
+      h("div", { class: "kpi" }, h("b", {}, pc(p.over25)), h("span", {}, "Plus de 2,5 buts")),
+      h("div", { class: "kpi" }, h("b", {}, pc(1 - p.over25)), h("span", {}, "Moins de 2,5 buts")),
+      h("div", { class: "kpi" }, h("b", {}, `${p.scores[0][0]} – ${p.scores[0][1]}`), h("span", {}, `Score le plus probable (${pc(p.scores[0][2])})`)),
+      h("div", { class: "kpi" }, h("b", {}, `${fr(p.lH, 2)} – ${fr(p.lA, 2)}`), h("span", {}, "Buts attendus par le modèle"))),
+    h("h3", { style: "margin:18px 0 8px" }, "Scores les plus probables"),
+    barChart({ labels: p.scores.map(s => `${s[0]}-${s[1]}`), series: [{ name: "Probabilité", values: p.scores.map(s => Math.round(s[2] * 1000) / 10), color: "#00C875" }], fmt: v => fr(v, 1) + " %", height: 180 }),
+    h("h3", { style: "margin:18px 0 8px" }, "Les facteurs de l’estimation"),
+    h("ul", { class: "factors" },
+      factor("Forme récente :", `${H} ${f5(S) != null ? fr(f5(S), 1) + " pt/match" : "n.d."} sur ses 5 derniers matchs (${[...(S.form || "").slice(-5)].map(c => ({ W: "V", D: "N", L: "D" })[c] || c).join("") || "n.d."}), ${A} ${f5(T) != null ? fr(f5(T), 1) + " pt/match" : "n.d."}. Effet sur les buts attendus : ${p.fH >= 1 ? "+" : ""}${fr((p.fH - 1) * 100)} % et ${p.fA >= 1 ? "+" : ""}${fr((p.fA - 1) * 100)} %.`),
+      factor("Avantage du terrain :", `dans cette compétition, on marque en moyenne ${fr(p.muH, 2)} but(s) à domicile contre ${fr(p.muA, 2)} à l’extérieur. ${H} gagne ${winH != null ? pc(winH) : "n.d."} de ses matchs à domicile, ${A} ${winA != null ? pc(winA) : "n.d."} de ses matchs à l’extérieur.`),
+      factor("Attaque :", `${H} à domicile ${fr(p.attH * 100)} (100 = moyenne), ${A} à l’extérieur ${fr(p.attA * 100)}.`),
+      factor("Défense :", `buts concédés par ${H} à domicile ${fr(p.defH * 100)}, par ${A} à l’extérieur ${fr(p.defA * 100)} (100 = moyenne, plus bas = plus solide).`),
+      factor("Confrontations directes :", h2h.length ? `${hw} victoire(s) de ${H}, ${dw} nul(s), ${aw} victoire(s) de ${A} sur les ${h2h.length} dernières rencontres. Affiché pour contexte, non utilisé dans le calcul (échantillon trop petit et souvent ancien).` : "aucune rencontre récente dans les données."),
+      factor("Base de calcul :", `${p.base} ; ${p.n} match(s) minimum par équipe dans le contexte domicile/extérieur utilisé.`)),
+    h("p", { class: "disclaimer" }, "Ces probabilités sont des estimations statistiques, pas des résultats garantis. Le football reste imprévisible : blessures, suspensions, rotations et météo ne sont pas pris en compte."),
+    h("details", { class: "panel doc" }, h("summary", {}, "Comment fonctionne le modèle ?"),
+      h("ol", {},
+        h("li", {}, "On calcule la moyenne de buts marqués à domicile et à l’extérieur dans la compétition, à partir du classement."),
+        h("li", {}, "On mesure la force offensive et défensive de chaque équipe à domicile et à l’extérieur, par rapport à ces moyennes. Quand une équipe a joué peu de matchs, sa force est ramenée vers la moyenne (comme si elle avait aussi joué 4 matchs « moyens »), pour éviter les conclusions hâtives."),
+        h("li", {}, "On ajuste légèrement (10 % au maximum) selon la forme sur les 5 derniers matchs."),
+        h("li", {}, "On en déduit le nombre de buts attendus de chaque équipe, puis la probabilité de chaque score avec une loi de Poisson, corrigée pour les petits scores (méthode de Dixon et Coles, 1997)."),
+        h("li", {}, "En additionnant les probabilités de tous les scores, on obtient victoire, nul, défaite, « les deux équipes marquent » et « plus ou moins de 2,5 buts »."),
+        h("li", {}, "Niveau de confiance : élevé si chaque équipe a joué au moins 6 matchs dans le contexte utilisé et que le classement est disponible, moyen à partir de 3 matchs, faible en dessous.")))
+  ];
+}
+
+async function matchAnalysisList(box, ctx) {
+  put(box, skeleton(2));
+  try {
+    const [t, d] = await Promise.all([api(`matches?date=${TODAY()}`, { ttl: 60000 }), api(`matches?date=${addDays(TODAY(), 1)}`, { ttl: 600000 })]);
+    if (ctx && !ctx.alive()) return;
+    const up = [...t.data, ...d.data].filter((m, i, all) => m.status.state === "scheduled" && all.findIndex(x => x.id === m.id) === i);
+    const big = pick(up, 12);
+    put(box, big.length ? [h("div", {}, groupMatches(big).map(g => groupBlock(g, { showDate: true }))),
+      h("p", { class: "updated" }, "Touchez un match puis l’onglet « Probabilités » pour voir l’analyse complète.")] : empty("Aucun grand match à venir d’ici demain", "Consultez la rubrique Football pour choisir un autre jour."));
+    box.querySelectorAll("a.row").forEach(a => a.href = a.getAttribute("href") + "?onglet=proba");
   } catch (e) { put(box, stateBox(e)); }
 }
 
