@@ -453,8 +453,8 @@ async function viewCompetitions(root, ctx, params) {
 
 async function viewSearch(root, ctx, params) {
   const q = (params.get("q") || "").trim();
-  root.append(h("h1", {}, q ? `Résultats pour « ${q} »` : "Recherche"), h("div", { id: "sx" }, q.length >= 3 ? skeleton(4) : empty("Tapez au moins 3 lettres", "Recherchez un club, une sélection, un joueur, un entraîneur ou une compétition.")));
-  if (q.length < 3) return;
+  root.append(h("h1", {}, q ? `Résultats pour « ${q} »` : "Recherche"), h("div", { id: "sx" }, q.length >= 2 ? skeleton(4) : empty("Tapez au moins 2 lettres", "Recherchez un club, une sélection, un joueur, un entraîneur ou une compétition.")));
+  if (q.length < 2) return;
   let body;
   try { body = await api(`search?q=${encodeURIComponent(q)}&full=1`, { ttl: 600000 }); } catch (e) { if (ctx.alive()) put($("#sx", root), stateBox(e)); return; }
   if (!ctx.alive()) return;
@@ -1283,7 +1283,7 @@ function setupSearch() {
     clearTimeout(timer);
     const q = input.value.trim();
     if (!q) return close();
-    if (q.length < 3) { put(box, h("div", { class: "sug-msg" }, "Tapez au moins 3 lettres…")); items = []; open(); return; }
+    if (q.length < 2) { put(box, h("div", { class: "sug-msg" }, "Tapez au moins 2 lettres…")); items = []; open(); return; }
     timer = setTimeout(async () => {
       ctrl?.abort(); ctrl = new AbortController();
       put(box, h("div", { class: "sug-msg" }, "Recherche…")); open();

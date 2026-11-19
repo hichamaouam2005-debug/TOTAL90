@@ -147,6 +147,35 @@ function aggregate(comps) {
   return t;
 }
 
+
+// ---- Recherche : surnoms et noms français → noms utilisés par le fournisseur ----
+const ALIASES = {
+  "psg": "Paris Saint Germain", "paris sg": "Paris Saint Germain", "paris saint-germain": "Paris Saint Germain",
+  "om": "Marseille", "olympique de marseille": "Marseille", "ol": "Lyon", "olympique lyonnais": "Lyon", "losc": "Lille", "asse": "Saint Etienne",
+  "saint-etienne": "Saint Etienne", "asm": "Monaco", "as monaco": "Monaco", "ogcn": "Nice", "rcl": "Lens", "rc lens": "Lens", "srfc": "Rennes", "fcn": "Nantes",
+  "barca": "Barcelona", "barça": "Barcelona", "barcelone": "Barcelona", "fc barcelone": "Barcelona", "real": "Real Madrid", "atletico": "Atletico Madrid", "atlético": "Atletico Madrid", "seville": "Sevilla", "séville": "Sevilla",
+  "man utd": "Manchester United", "man united": "Manchester United", "manchester utd": "Manchester United", "man city": "Manchester City", "spurs": "Tottenham",
+  "bayern": "Bayern", "bayern munich": "Bayern", "bvb": "Dortmund", "juve": "Juventus", "naples": "Napoli", "milan ac": "AC Milan", "ac milan": "AC Milan", "inter milan": "Inter", "rome": "Roma", "as rome": "Roma", "lazio rome": "Lazio",
+  "les bleus": "France", "equipe de france": "France", "allemagne": "Germany", "espagne": "Spain", "angleterre": "England", "italie": "Italy", "belgique": "Belgium",
+  "pays-bas": "Netherlands", "pays bas": "Netherlands", "hollande": "Netherlands", "suisse": "Switzerland", "croatie": "Croatia", "danemark": "Denmark", "norvege": "Norway", "norvège": "Norway",
+  "suede": "Sweden", "suède": "Sweden", "pologne": "Poland", "autriche": "Austria", "grece": "Greece", "grèce": "Greece", "turquie": "Turkey", "ecosse": "Scotland", "écosse": "Scotland",
+  "pays de galles": "Wales", "irlande": "Ireland", "irlande du nord": "Northern Ireland", "russie": "Russia", "tchequie": "Czech Republic", "tchéquie": "Czech Republic", "hongrie": "Hungary", "roumanie": "Romania", "serbie": "Serbia",
+  "maroc": "Morocco", "algerie": "Algeria", "algérie": "Algeria", "tunisie": "Tunisia", "senegal": "Senegal", "sénégal": "Senegal", "cote d'ivoire": "Ivory Coast", "côte d'ivoire": "Ivory Coast", "côte d’ivoire": "Ivory Coast",
+  "egypte": "Egypt", "égypte": "Egypt", "cameroun": "Cameroon", "afrique du sud": "South Africa", "rd congo": "Congo DR", "bresil": "Brazil", "brésil": "Brazil", "argentine": "Argentina",
+  "colombie": "Colombia", "uruguay": "Uruguay", "mexique": "Mexico", "etats-unis": "USA", "états-unis": "USA", "usa": "USA", "japon": "Japan", "coree du sud": "South Korea", "corée du sud": "South Korea",
+  "arabie saoudite": "Saudi Arabia", "australie": "Australia", "chine": "China"
+};
+// Grands clubs et sélections remontés en tête des résultats (identifiants API-Football)
+const POPULAR_TEAMS = [85, 81, 80, 91, 79, 541, 529, 530, 33, 50, 40, 42, 49, 47, 157, 165, 496, 505, 489, 492, 2, 1, 6, 9, 10, 25, 27, 768, 31, 26];
+function teamScore(t, term) {
+  const n = (t.name || "").toLowerCase(), q = term.toLowerCase();
+  let s = 0;
+  if (n === q) s += 100; else if (n.startsWith(q)) s += 40; else if (n.includes(q)) s += 20;
+  if (POPULAR_TEAMS.includes(t.id)) s += 60;
+  if (/\b(u|-)\s?\d{2}\b|\bu\d{2}\b|\bii\b|\biii\b| b$|\bres(erves?)?\b|\bw\b|women|fém|feminin|youth|academy|primavera/i.test(t.name || "")) s -= 50;
+  return s;
+}
+
 const clean = q => q.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 const settle = p => p.then(v => ({ ok: true, v }), e => ({ ok: false, e }));
 
@@ -181,14 +210,18 @@ export function apiFootball(key) {
     },
 
     async search(q, full) {
+      const raw = q.trim().toLowerCase();
+      const aliasTerm = ALIASES[raw] ? clean(ALIASES[raw]) : null;
       const term = clean(q);
-      if (term.length < 3) return { teams: [], leagues: [], players: [], coaches: [] };
-      const jobs = [settle(call("teams", { search: term }, key)), settle(call("leagues", { search: term }, key))];
-      if (full) jobs.push(settle(call("players/profiles", { search: term }, key)), settle(call("coachs", { search: term }, key)));
+      if (term.length < 3 && !aliasTerm) return { teams: [], leagues: [], players: [], coaches: [] };
+      const teamTerm = aliasTerm || term;
+      const jobs = [settle(call("teams", { search: teamTerm }, key)), term.length >= 3 ? settle(call("leagues", { search: term }, key)) : Promise.resolve({ ok: true, v: [] })];
+      if (full && term.length >= 3) jobs.push(settle(call("players/profiles", { search: term }, key)), settle(call("coachs", { search: term }, key)));
       const [t, l, p, c] = await Promise.all(jobs);
       if (!t.ok && !l.ok) throw t.e;
       return {
-        teams: t.ok ? t.v.map(x => ({ id: x.team.id, name: x.team.name, logo: x.team.logo, country: x.team.country, national: x.team.national })) : null,
+        teams: t.ok ? t.v.map(x => ({ id: x.team.id, name: x.team.name, logo: x.team.logo, country: x.team.country, national: x.team.national }))
+          .sort((a, b) => teamScore(b, teamTerm) - teamScore(a, teamTerm)) : null,
         leagues: l.ok ? l.v.map(league) : null,
         players: !full ? [] : p.ok ? p.v.map(x => ({ id: x.player.id, name: x.player.name, photo: x.player.photo, age: x.player.age, nationality: x.player.nationality, position: x.player.position })) : null,
         coaches: !full ? [] : c.ok ? c.v.map(x => ({ id: x.id, name: x.name, photo: x.photo, age: x.age, nationality: x.nationality, team: x.team ? { id: x.team.id, name: x.team.name, logo: x.team.logo } : null })) : null
