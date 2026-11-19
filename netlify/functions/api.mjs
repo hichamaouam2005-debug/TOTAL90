@@ -2,6 +2,7 @@
 // Le navigateur appelle /api/..., jamais le fournisseur directement.
 import { apiFootball, ProviderError } from "../lib/api-football.mjs";
 import { getNews } from "../lib/news.mjs";
+import * as espn from "../lib/espn.mjs";
 
 const PROVIDERS = { "api-football": apiFootball };
 const memo = new Map(); // cache mémoire de l'instance (complété par le cache CDN de Netlify)
@@ -20,6 +21,7 @@ const PAST_OR_FUTURE = 86400;
 // Chaque route : [fonction, durée de cache en secondes]
 const ROUTES = {
   news: true, // traité à part plus bas
+  espn: true, // traité à part plus bas
   async matches(p, prov) {
     const date = isDate(p.get("date")) ? p.get("date") : today();
     const data = await prov.matchesByDate(date, tzOf(p));
@@ -98,6 +100,29 @@ export default async req => {
       memo.set("news", { data: payload, until: Date.now() + 900000 });
       return json(payload, 200, 900);
     } catch (e) { return json({ error: "upstream", message: "Les actualités sont momentanément indisponibles." }, 502); }
+  }
+
+  // Autres sports : points d'accès publics d'ESPN, sans clé ni quota
+  if (route === "espn") {
+    const p = url.searchParams, date = isDate(p.get("date")) ? p.get("date") : null;
+    const tour = p.get("tour") === "wta" ? "wta" : "atp";
+    const jobs = {
+      basketball: () => espn.basketball(date), "nba-standings": () => espn.nbaStandings(),
+      tennis: () => espn.tennis(tour, date), "tennis-rankings": () => espn.tennisRankings(tour),
+      f1: () => espn.f1(), mma: () => espn.mma()
+    };
+    if (!jobs[id]) return json({ error: "not_found", message: "Route inconnue." }, 404);
+    const cacheKey = url.pathname + url.search;
+    const hit = memo.get(cacheKey);
+    if (hit && hit.until > Date.now()) return json(hit.data, 200, Math.round((hit.until - Date.now()) / 1000));
+    try {
+      const data = await jobs[id]();
+      const live = JSON.stringify(data).includes('"state":"live"');
+      const ttl = /standings|rankings/.test(id) ? 3600 : live ? 60 : 600;
+      const payload = { data, provider: "ESPN (données publiques)", fetchedAt: new Date().toISOString() };
+      memo.set(cacheKey, { data: payload, until: Date.now() + ttl * 1000 });
+      return json(payload, 200, ttl);
+    } catch (e) { return json({ error: "upstream", message: e.message || "Données momentanément indisponibles." }, 502); }
   }
 
   const providerName = env("SPORTS_PROVIDER") || "api-football";

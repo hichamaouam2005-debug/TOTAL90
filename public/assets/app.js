@@ -963,11 +963,146 @@ async function matchAnalysisList(box, ctx) {
   } catch (e) { put(box, stateBox(e)); }
 }
 
+/* ================= ÉTAPE 5 : BASKETBALL, TENNIS, AUTRES SPORTS ================= */
+const espnNote = () => h("p", { class: "updated" }, "Source : données publiques d’ESPN (gratuites, sans quota). Elles ne sont pas officiellement documentées : si ESPN les modifie, la section concernée s’affichera comme indisponible le temps de l’adapter.");
+function dateBar(date, base) {
+  return h("div", { class: "bar" },
+    ["Hier", "Aujourd’hui", "Demain"].map((l, i) => { const d = addDays(TODAY(), i - 1); return h("a", { class: "chip" + (d === date ? " on" : ""), href: `#/${base}?date=${d}` }, l); }),
+    h("input", { class: "field", type: "date", value: date, "aria-label": "Choisir une date", onchange: e => e.target.value && (location.hash = `#/${base}?date=${e.target.value}`) }));
+}
+const sportClock = g => g.state === "scheduled" ? hm(g.date) : g.state === "live" ? (trFR(g.detail) || "En cours") : g.state === "finished" ? "Terminé" : trFR(g.detail);
+
+const TR_RULES = [
+  [/Men's Singles/i, "Simple messieurs"], [/Women's Singles/i, "Simple dames"], [/Men's Doubles/i, "Double messieurs"], [/Women's Doubles/i, "Double dames"], [/Mixed Doubles/i, "Double mixte"],
+  [/^Round Robin$/i, "Phase de groupes"], [/^Quarterfinals?$/i, "Quart de finale"], [/^Semifinals?$/i, "Demi-finale"], [/^Finals?$/i, "Finale"],
+  [/^Round of 16$/i, "Huitièmes de finale"], [/^Round of 32$/i, "Seizièmes de finale"], [/^Round 1$/i, "1er tour"], [/^Round (\d+)$/i, "$1e tour"], [/^Qualifying/i, "Qualifications"],
+  [/(\d)(?:st|nd|rd|th) Set/i, (m, n) => n === "1" ? "1er set" : `${n}e set`], [/^Halftime$/i, "Mi-temps"], [/End of (\d)(?:st|nd|rd|th)/i, (m, n) => n === "1" ? "Fin du 1er QT" : `Fin du ${n}e QT`], [/^Q(\d)\b/, "QT$1"], [/^OT\b/, "Prol."],
+  [/Decision - Unanimous/i, "Décision unanime"], [/Decision - Split/i, "Décision partagée"], [/Decision - Majority/i, "Décision majoritaire"], [/Submission/i, "Soumission"],
+  [/Women's (.+)/i, "$1 féminin"], [/Light Heavyweight/i, "Poids mi-lourds"], [/Heavyweight/i, "Poids lourds"], [/Middleweight/i, "Poids moyens"], [/Welterweight/i, "Poids welters"],
+  [/Lightweight/i, "Poids légers"], [/Featherweight/i, "Poids plumes"], [/Bantamweight/i, "Poids coqs"], [/Flyweight/i, "Poids mouches"], [/Strawweight/i, "Poids pailles"], [/Catchweight/i, "Poids convenu"]
+];
+const trFR = v => v ? TR_RULES.reduce((a, [re, to]) => a.replace(re, to), String(v)) : v;
+
+/* ---------- Basketball ---------- */
+function nbaCard(g) {
+  const live = g.state === "live", done = g.state === "finished";
+  const line = t => h("div", { class: "bk-team" + (done && t.winner ? " w" : "") }, img(t.logo), h("span", {}, t.name, t.record ? h("small", {}, ` (${t.record})`) : null), h("b", {}, g.state === "scheduled" ? "" : t.score ?? "–"));
+  const card = h("button", { type: "button", class: "game bk", "aria-expanded": "false", style: "--c:#C9082A" },
+    h("div", { class: "bk-head" }, h("span", { class: "when" + (live ? " live" : "") }, sportClock(g)), g.broadcast ? h("small", {}, g.broadcast) : null),
+    line(g.away), line(g.home),
+    h("span", { class: "meta" }, g.venue ? `${g.venue}${g.city ? ", " + g.city : ""}` : "", g.topScorer?.name ? h("span", {}, `Meilleur marqueur : ${g.topScorer.name} (${g.topScorer.value})`) : null));
+  card.addEventListener("click", () => {
+    const open = card.getAttribute("aria-expanded") === "true"; card.setAttribute("aria-expanded", String(!open));
+    card.querySelector(".qt")?.remove();
+    if (!open && g.home.quarters.length) {
+      const n = Math.max(g.home.quarters.length, g.away.quarters.length);
+      card.append(h("table", { class: "standings qt" }, h("thead", {}, h("tr", {}, h("th", {}, ""), ...Array.from({ length: n }, (_, i) => h("th", {}, i < 4 ? `Q${i + 1}` : `Prol. ${i - 3}`)), h("th", {}, "Total"))),
+        h("tbody", {}, [g.away, g.home].map(t => h("tr", {}, h("td", {}, t.short || t.name), ...Array.from({ length: n }, (_, i) => h("td", {}, t.quarters[i] ?? "")), h("td", { class: "pts" }, t.score ?? ""))))));
+    }
+  });
+  return card;
+}
+async function viewBasketball(root, ctx, params) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") || "") ? params.get("date") : TODAY();
+  const list = h("div", {}, skeleton(3)), table = h("div", {}, skeleton(2));
+  root.append(h("h1", {}, "Basketball"), h("p", { class: "sub" }, `NBA · ${longDate(date)}. Les horaires sont à l’heure de votre appareil : la plupart des matchs NBA se jouent la nuit en Europe.`),
+    dateBar(date, "basketball"), h("div", { class: "grid-2" }, h("div", {}, h("h2", {}, "Matchs NBA"), list), h("aside", {}, h("h2", {}, "Classement NBA"), table)), espnNote());
+  const load = async () => {
+    try {
+      // La journée NBA américaine chevauche deux dates européennes : on prend la veille et le jour même, puis on filtre sur la date locale.
+      const [a, b] = await Promise.all([api(`espn/basketball?date=${addDays(date, -1)}`, { ttl: 30000 }), api(`espn/basketball?date=${date}`, { ttl: 30000 })]);
+      if (!ctx.alive()) return;
+      const games = [...a.data, ...b.data].filter((g, i, all) => all.findIndex(x => x.id === g.id) === i && ymd(new Date(g.date)) === date).sort((x, y) => x.date.localeCompare(y.date));
+      put(list, games.length ? h("div", { class: "games" }, games.map(nbaCard)) : empty("Aucun match NBA ce jour-là", "Essayez une autre date."), h("p", { class: "updated" }, "Touchez un match pour le score par quart-temps."), updatedLine(b));
+    } catch (e) { if (ctx.alive()) put(list, stateBox(e)); }
+  };
+  await load();
+  ctx.every(LIVE_REFRESH * 2, load);
+  try {
+    const st = await api("espn/nba-standings", { ttl: 600000 });
+    if (!ctx.alive()) return;
+    put(table, st.data.length ? st.data.map(c => [h("h3", { style: "margin:12px 0 6px" }, c.name), h("div", { class: "panel table-wrap" }, h("table", { class: "standings" },
+      h("thead", {}, h("tr", {}, ["#", "Équipe", "V", "D", "%", "Écart"].map(x => h("th", {}, x)))),
+      h("tbody", {}, c.rows.map((r, i) => h("tr", {}, h("td", {}, r.seed ?? i + 1), h("td", {}, h("span", { class: "tm-inline" }, img(r.logo), r.team)), h("td", {}, r.w ?? "–"), h("td", {}, r.l ?? "–"), h("td", {}, r.pct ?? "–"), h("td", {}, r.gb ?? "–"))))))]) : empty("Classement indisponible", ""));
+  } catch (e) { put(table, stateBox(e)); }
+}
+
+/* ---------- Tennis ---------- */
+function tennisRow(m) {
+  const live = m.state === "live";
+  const maxSets = Math.max(0, ...m.players.map(p => p.sets.length));
+  return h("div", { class: "tn" + (live ? " live" : "") },
+    h("div", { class: "tn-head" }, h("span", { class: "when" + (live ? " live" : "") }, sportClock(m)), m.round ? h("small", {}, trFR(m.round)) : null, m.court ? h("small", {}, m.court) : null),
+    m.players.map(p => h("div", { class: "tn-p" + (p.winner ? " w" : "") }, p.flag ? h("img", { src: p.flag, alt: "", class: "flag", loading: "lazy" }) : h("span", { class: "flag" }),
+      h("span", { class: "nm" }, p.name, p.seed ? h("small", {}, ` (${p.seed})`) : null),
+      h("span", { class: "sets" }, Array.from({ length: maxSets }, (_, i) => { const s = p.sets[i]; return h("b", {}, s ? s.v ?? "" : "", s?.tb != null ? h("sup", {}, s.tb) : null); })))));
+}
+async function viewTennis(root, ctx, params) {
+  const tour = params.get("circuit") === "wta" ? "wta" : "atp";
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") || "") ? params.get("date") : TODAY();
+  const list = h("div", {}, skeleton(3)), rk = h("div", {}, skeleton(3));
+  root.append(h("h1", {}, "Tennis"), h("p", { class: "sub" }, `${tour.toUpperCase()} · ${longDate(date)}`),
+    h("div", { class: "bar" }, ["atp", "wta"].map(t => h("a", { class: "chip" + (t === tour ? " on" : ""), href: `#/tennis?circuit=${t}&date=${date}` }, t === "atp" ? "ATP (messieurs)" : "WTA (dames)"))),
+    h("div", { class: "bar" }, ["Hier", "Aujourd’hui", "Demain"].map((l, i) => { const d = addDays(TODAY(), i - 1); return h("a", { class: "chip" + (d === date ? " on" : ""), href: `#/tennis?circuit=${tour}&date=${d}` }, l); })),
+    h("div", { class: "grid-2" }, h("div", {}, h("h2", {}, "Matchs"), list), h("aside", {}, h("h2", {}, `Classement ${tour.toUpperCase()}`), rk)), espnNote());
+  const load = async () => {
+    try {
+      const b = await api(`espn/tennis?tour=${tour}&date=${date}`, { ttl: 30000 });
+      if (!ctx.alive()) return;
+      put(list, b.data.length ? b.data.map(t => h("section", { class: "group" }, h("div", { class: "ghead" }, h("div", {}, h("b", {}, t.name), h("br"), h("small", {}, [t.venue, t.start ? `${dayLabel(t.start)}${t.end ? " – " + dayLabel(t.end) : ""}` : null].filter(Boolean).join(" · ")))),
+        t.groups.map(g => [h("div", { class: "tn-group" }, trFR(g.name)), g.matches.map(tennisRow)]))) : empty("Aucun match ce jour-là sur ce circuit", "Hors saison ou jour de repos : essayez une autre date ou l’autre circuit."), updatedLine(b));
+    } catch (e) { if (ctx.alive()) put(list, stateBox(e)); }
+  };
+  await load();
+  ctx.every(LIVE_REFRESH * 2, load);
+  try {
+    const r = await api(`espn/tennis-rankings?tour=${tour}`, { ttl: 600000 });
+    if (!ctx.alive()) return;
+    put(rk, r.data.rows.length ? h("div", { class: "panel table-wrap" }, h("table", { class: "standings" },
+      h("thead", {}, h("tr", {}, ["#", "Joueur", "Points", ""].map(x => h("th", {}, x)))),
+      h("tbody", {}, r.data.rows.slice(0, 50).map(p => h("tr", {}, h("td", {}, p.rank), h("td", {}, h("span", { class: "tm-inline" }, p.flag ? h("img", { src: p.flag, alt: "", class: "flag" }) : null, p.name)), h("td", {}, p.points != null ? fr(p.points) : "–"),
+        h("td", { class: p.previous && p.rank < p.previous ? "up" : p.previous && p.rank > p.previous ? "down" : "" }, p.previous && p.previous !== p.rank ? (p.rank < p.previous ? `▲ ${p.previous - p.rank}` : `▼ ${p.rank - p.previous}`) : "")))))) : empty("Classement indisponible", ""));
+  } catch (e) { put(rk, stateBox(e)); }
+}
+
+/* ---------- Autres sports : F1 et UFC ---------- */
+async function viewOtherSports(root, ctx) {
+  const f1Box = h("div", {}, skeleton(3)), ufcBox = h("div", {}, skeleton(3));
+  root.append(h("h1", {}, "Autres sports"), h("p", { class: "sub" }, "Formule 1 et UFC en données réelles. Pour l’athlétisme, le rugby, le cyclisme et les autres disciplines, retrouvez les dernières informations dans les Actualités."),
+    h("div", { class: "grid-2" }, h("div", {}, h("h2", {}, "Formule 1"), f1Box), h("aside", {}, h("h2", {}, "UFC"), ufcBox)),
+    h("div", { class: "bar", style: "margin-top:18px" }, h("a", { class: "chip", href: "#/actualites?cat=f1" }, "Actualités F1"), h("a", { class: "chip", href: "#/actualites?cat=combat" }, "Sports de combat"), h("a", { class: "chip", href: "#/actualites?cat=athletisme" }, "Athlétisme"), h("a", { class: "chip", href: "#/actualites?cat=autres" }, "Autres sports")),
+    espnNote());
+  const upcomingCal = cal => cal.filter(c => new Date(c.end || c.start) >= new Date(Date.now() - 864e5)).slice(0, 6);
+  try {
+    const { data } = await api("espn/f1", { ttl: 60000 });
+    if (!ctx.alive()) return;
+    const ev = data.events[0];
+    put(f1Box,
+      ev ? h("section", { class: "group" }, h("div", { class: "ghead" }, h("div", {}, h("b", {}, ev.name), h("br"), h("small", {}, [ev.circuit, ev.start ? dayLabel(ev.start) + (ev.end ? " – " + dayLabel(ev.end) : "") : null].filter(Boolean).join(" · ")))),
+        ev.sessions.map(s => h("div", { class: "f1s" }, h("div", { class: "tn-group" }, `${({ FP1: "Essais libres 1", FP2: "Essais libres 2", FP3: "Essais libres 3", Qual: "Qualifications", Race: "Course", Sprint: "Sprint", SS: "Qualifications sprint" })[s.type] || s.type} · ${s.state === "scheduled" ? dayLabel(s.date) + " " + hm(s.date) : s.state === "live" ? "En cours" : s.state === "finished" ? "Terminé" : s.detail}`),
+          s.results.length && s.state !== "scheduled" ? h("ol", { class: "f1r" }, s.results.slice(0, 10).map(r => h("li", { class: r.pos === 1 ? "w" : "" }, h("b", {}, r.pos ?? ""), r.flag ? h("img", { src: r.flag, alt: "", class: "flag" }) : h("span", { class: "flag" }), h("span", {}, r.name), r.team ? h("small", {}, r.team) : null))) : null)))
+        : empty("Pas de Grand Prix en cours", "La saison est peut-être terminée : consultez le calendrier."),
+      upcomingCal(data.calendar).length ? [h("h3", { style: "margin:16px 0 8px" }, "Prochains rendez-vous"), h("div", { class: "group" }, upcomingCal(data.calendar).map(c => h("div", { class: "row cal" }, h("span", { class: "when" }, dayLabel(c.start)), h("span", {}, c.name), h("span", {}))))] : null);
+  } catch (e) { put(f1Box, stateBox(e)); }
+  try {
+    const { data } = await api("espn/mma", { ttl: 60000 });
+    if (!ctx.alive()) return;
+    const ev = data.events[0];
+    put(ufcBox,
+      ev ? h("section", { class: "group" }, h("div", { class: "ghead" }, h("div", {}, h("b", {}, ev.name), h("br"), h("small", {}, [ev.venue, ev.date ? dayLabel(ev.date) + " " + hm(ev.date) : null].filter(Boolean).join(" · ")))),
+        ev.fights.map(f => h("div", { class: "fight" }, h("div", { class: "tn-head" }, h("span", { class: "when" + (f.state === "live" ? " live" : "") }, f.state === "finished" ? "Terminé" : f.state === "live" ? "En cours" : ""), f.category ? h("small", {}, trFR(f.category)) : null),
+          f.fighters.map(p => h("div", { class: "tn-p" + (p.winner ? " w" : "") }, p.flag ? h("img", { src: p.flag, alt: "", class: "flag" }) : h("span", { class: "flag" }), h("span", { class: "nm" }, p.name, p.record ? h("small", {}, ` (${p.record})`) : null), p.winner ? h("b", { class: "win-tag" }, "Vainqueur") : h("span", {}))),
+          f.state === "finished" && f.result ? h("small", { class: "updated" }, trFR(f.result)) : null)))
+        : empty("Pas de gala UFC en cours", ""),
+      upcomingCal(data.calendar).length ? [h("h3", { style: "margin:16px 0 8px" }, "Prochains galas"), h("div", { class: "group" }, upcomingCal(data.calendar).map(c => h("div", { class: "row cal" }, h("span", { class: "when" }, dayLabel(c.start)), h("span", {}, c.name), h("span", {}))))] : null);
+  } catch (e) { put(ufcBox, stateBox(e)); }
+}
+
 /* ---------- routeur ---------- */
 const ROUTES = [
   [/^\/$/, viewHome], [/^\/live$/, viewLive], [/^\/football$/, viewFootball], [/^\/match\/(\d+)$/, viewMatch],
   [/^\/equipe\/(\d+)$/, viewTeam], [/^\/competition\/(\d+)$/, viewLeague], [/^\/competitions$/, viewCompetitions],
-  [/^\/recherche$/, viewSearch], [/^\/favoris$/, viewFavorites], [/^\/joueur\/(\d+)$/, viewPlayer], [/^\/analyses$/, viewAnalyses], [/^\/actualites$/, viewNews], [/^\/(basketball|tennis|autres-sports)$/, viewSoon]
+  [/^\/recherche$/, viewSearch], [/^\/favoris$/, viewFavorites], [/^\/joueur\/(\d+)$/, viewPlayer], [/^\/analyses$/, viewAnalyses], [/^\/actualites$/, viewNews], [/^\/basketball$/, viewBasketball], [/^\/tennis$/, viewTennis], [/^\/autres-sports$/, viewOtherSports]
 ];
 let current = null;
 function router() {
